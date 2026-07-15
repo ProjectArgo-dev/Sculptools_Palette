@@ -1,0 +1,31 @@
+schema_version = "1.0.0"
+
+# Extension metadata (Blender 4.2+). Replaces `bl_info`, which was removed from
+# __init__.py: in extension mode Blender reads ONLY this file. See
+# https://docs.blender.org/manual/en/latest/advanced/extensions/
+id = "sculptools_palette"
+version = "1.0.0"
+name = "Sculptools: Palette"
+tagline = "Radial palette for sculpt brushes and tools"
+maintainer = "Argo"
+type = "add-on"
+
+# Tags must come from the official vocabulary for the "add-on" type
+# (case-sensitive); the validator rejects unknown ones.
+tags = ["Sculpt", "User Interface"]
+
+# Extensions require Blender >= 4.2 (they did not exist before).
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+# Copyright holders of bundled material. The tool-slot icons are rasterized from
+# Blender's own UI icon set, so the Blender Authors are credited here.
+copyright = [
+  "2026 Argo",
+  "2002-2024 Blender Authors (bundled Sculpt tool icons)",
+]
+
+# No [permissions] section: the slot "clipboard" is an internal Python dict (not
+# the system clipboard) and the only files read are the PNG icons bundled in the
+# package plus Blender's own assets accessed via system_resource.
