@@ -223,6 +223,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         self._glow_size       = prefs.glow_size
         self._glow_intensity  = prefs.glow_intensity
         self._glow_falloff    = prefs.glow_falloff
+        self._fixed_slot_outline = prefs.fixed_slot_outline
 
         # Remember which key opened the wheel so "press the same key again to
         # close" works with any binding the user chooses (default is now '\',
@@ -355,6 +356,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             'glow_size':        self._glow_size,
             'glow_intensity':   self._glow_intensity,
             'glow_falloff':     self._glow_falloff,
+            'fixed_slot_outline': self._fixed_slot_outline,
             'palette_index':  pal_index,
             'palette_total':  pal_total,
             'palette_name':   pit.name,

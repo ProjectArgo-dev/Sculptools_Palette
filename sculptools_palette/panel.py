@@ -72,6 +72,7 @@ def _draw_preview_cb():
         'glow_size':        prefs.glow_size,
         'glow_intensity':   prefs.glow_intensity,
         'glow_falloff':     prefs.glow_falloff,
+        'fixed_slot_outline': prefs.fixed_slot_outline,
         # Settings preview: show the glow on every slot/sub-slot so the user can
         # judge the gradient params across the whole wheel, not just on hover.
         'glow_all':         True,
@@ -385,10 +386,10 @@ class SCULPTOOLS_PT_palette(Panel):
         col.prop(prefs, "palette_radius",     slider=True)
         col.prop(prefs, "slot_radius",        slider=True)
         col.prop(prefs, "slot_rim_width",     slider=True)
+        col.prop(prefs, "subslot_rim_width",  slider=True)
         col.separator()
         col.prop(prefs, "glow_intensity",     slider=True)
-        col.separator()
-        col.prop(prefs, "subslot_rim_width",  slider=True)
+        col.prop(prefs, "fixed_slot_outline")
         # Gradient Size/Falloff, Sub-slot Size and Sub-slot Distance are NO longer
         # exposed in the panel (user request): they remain active properties with
         # their defaults (1.6 / 2.5 / 0.70 / 55.0) and are still read by
