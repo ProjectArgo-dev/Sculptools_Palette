@@ -27,6 +27,11 @@ C_TEXT       = (1.00, 1.00, 1.00, 1.00)
 C_TEXT_EMPTY = (0.38, 0.38, 0.38, 1.00)
 C_SPOKE      = (0.28, 0.28, 0.28, 0.35)
 C_CENTER     = (0.30, 0.30, 0.30, 0.50)
+
+# Resting outline (Fixed Slot Outline OFF, element NOT hovered): a thin neutral
+# 1px grey (#808080) ring. Fixed by design — not user-configurable.
+RESTING_OUTLINE_COLOUR = (0.5, 0.5, 0.5)
+RESTING_OUTLINE_WIDTH  = 1.0
 C_SUB_RIM    = (0.50, 0.50, 0.50, 1.00)
 C_DIM        = (0.00, 0.00, 0.00, 0.52)
 
@@ -1428,6 +1433,18 @@ def _draw_slot_contents(sx, sy, r, name, is_hov, alpha, fallback_label=None):
                             (*C_TEXT_EMPTY[:3], alpha * 0.6))
 
 
+def _outline_appearance(is_hovered, fixed, cfg_colour, cfg_width):
+    """Return (rgb, width) for a slot/sub-slot outline ring.
+
+    fixed=True  -> always the configured colour/width (legacy behaviour).
+    fixed=False -> configured colour/width only while hovered; at rest, the thin
+                   grey resting outline (RESTING_OUTLINE_COLOUR / _WIDTH).
+    Pure: no GPU calls. Unit-tested by test_resting_outline."""
+    if fixed or is_hovered:
+        return cfg_colour, cfg_width
+    return RESTING_OUTLINE_COLOUR, RESTING_OUTLINE_WIDTH
+
+
 # ── main entry point ──────────────────────────────────────────────────────────
 def draw_palette(state):
     cx        = state['cx'];          cy        = state['cy']
@@ -1450,6 +1467,7 @@ def draw_palette(state):
     sub_rim_w   = state.get('subslot_rim_width', 3.3)
     slot_rim_c  = tuple(state.get('slot_rim_colour', (0.90, 0.90, 0.90)))[:3]
     sub_rim_c   = tuple(state.get('subslot_rim_colour', (0.60, 0.60, 0.60)))[:3]
+    fixed       = state.get('fixed_slot_outline', True)
     n_slots   = state.get('num_slots', len(slots) if slots else 8)
 
     gpu.state.blend_set('ALPHA')
@@ -1477,16 +1495,18 @@ def draw_palette(state):
 
             is_hov  = (hov_sub == (i, k))
             bg_col  = (*C_BG_HOVER[:3], sa) if is_hov else (*C_BG[:3], sa * 0.88)
-            # Rim colour is the user's sub-slot colour; hover is at full alpha,
-            # non-hover slightly dimmer so the hovered one still stands out.
-            rim_col = (*sub_rim_c, sa) if is_hov else (*sub_rim_c, sa * 0.85)
+            # Outline colour/width from the Fixed Slot Outline rule: configured
+            # sub-slot colour/width, or the thin grey resting outline at rest when
+            # the toggle is off. Hover full alpha, non-hover slightly dimmer.
+            o_rgb, o_w = _outline_appearance(is_hov, fixed, sub_rim_c, sub_rim_w)
+            rim_col = (*o_rgb, sa) if is_hov else (*o_rgb, sa * 0.85)
 
             if is_hov or glow_all:
                 _draw_radial_glow(sx, sy, sub_sr * glow_sz, sub_rim_c,
                                   glow_in * sa, glow_fo)
             _draw_filled_circle(sx, sy, sub_sr, bg_col)
             _draw_slot_contents(sx, sy, sub_sr, name, is_hov, sa)
-            _draw_ring(sx, sy, sub_sr, sub_rim_w, rim_col)
+            _draw_ring(sx, sy, sub_sr, o_w, rim_col)
 
     for i in range(n_slots):
         a    = _slot_angle(i, n_slots)
@@ -1498,13 +1518,15 @@ def draw_palette(state):
 
         bg_col = (*C_BG_HOVER[:3], alpha) if is_hov else (*C_BG[:3], alpha * 0.88)
 
-        # Assigned/hover use the user's slot colour; empty slots stay a dim
-        # neutral so they read as "no brush here". Width is uniform per category.
+        # Empty slots keep their dim neutral ring. Assigned slots follow the Fixed
+        # Slot Outline rule: configured slot colour/width, or the thin grey resting
+        # outline at rest when the toggle is off (see _outline_appearance).
         if is_empty:
             rim_col = (*C_RING_EMPTY[:3], alpha * 0.55)
+            rim_w   = slot_rim_w
         else:
-            rim_col = (*slot_rim_c, alpha)
-        rim_w = slot_rim_w
+            o_rgb, rim_w = _outline_appearance(is_hov, fixed, slot_rim_c, slot_rim_w)
+            rim_col = (*o_rgb, alpha)
 
         # In the settings preview (glow_all) show the glow on every main slot so
         # the user can judge Gradient Size/Intensity/Falloff across the wheel.
