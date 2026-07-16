@@ -899,6 +899,37 @@ def diagnose_brush_preview(brush_name: str) -> str:
 
 
 
+def brush_name_available(name):
+    """True if this brush name resolves to real artwork right now: a cached
+    texture, a live datablock, or curated Essentials/custom artwork already in
+    the bundled cache. Used by the import counter (best-effort diagnostic;
+    Essentials count as present once preload_bundled_previews has run)."""
+    if name in _tex_cache:
+        return True
+    if bpy.data.brushes.get(name) is not None:
+        return True
+    return _bundled_preview_cache.get(_asset_name_for_brush(name)) is not None
+
+
+def slot_shows_not_found(name):
+    """True when a non-empty slot's assignment is CONCLUSIVELY unresolvable in
+    this session, so the wheel draws 'not found' instead of the raw name.
+
+    - Tool spec: the key is unknown, or the tool is gated out on this Blender.
+    - Brush: resolution has run and found no artwork (its asset name is present
+      in the bundled cache with a None value) and it is not otherwise available.
+      A brush still resolving (asset name not yet in the bundled cache) returns
+      False, so it shows its label transiently rather than a false 'not found'."""
+    from .tools import is_tool_spec, get_tool, tool_available
+    if is_tool_spec(name):
+        entry = get_tool(name)
+        return entry is None or not tool_available(entry, bpy.app.version)
+    if brush_name_available(name):
+        return False
+    asset = _asset_name_for_brush(name)
+    return asset in _bundled_preview_cache and _bundled_preview_cache[asset] is None
+
+
 def _get_brush_texture(brush_name: str):
     """Return a cached GPUTexture matching the brush's Asset Browser
     thumbnail, or None (caller falls back to a text label; we'll keep
