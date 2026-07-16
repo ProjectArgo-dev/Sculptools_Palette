@@ -296,11 +296,11 @@ class PaletteItem(PropertyGroup):
     sub_9_2: StringProperty(default="") # type: ignore
 
     slot_rim_colour: FloatVectorProperty(
-        name="Slot Rim Colour", subtype='COLOR_GAMMA', size=3,
+        name="Slot Outline Colour", subtype='COLOR_GAMMA', size=3,
         default=NEW_SLOT_COLOUR, min=0.0, max=1.0,
         update=_palette_colour_update) # type: ignore
     subslot_rim_colour: FloatVectorProperty(
-        name="Sub-slot Rim Colour", subtype='COLOR_GAMMA', size=3,
+        name="Sub-slot Outline Colour", subtype='COLOR_GAMMA', size=3,
         default=NEW_SUB_COLOUR, min=0.0, max=1.0,
         update=_palette_colour_update) # type: ignore
 
@@ -383,15 +383,15 @@ class SculptoolsPreferences(AddonPreferences):
         description="How quickly sub-slots disappear after moving the cursor away",
         update=_preview_redraw) # type: ignore
     slot_rim_width: FloatProperty(
-        name="Slot Rim Width", default=3.0, min=1.0, max=8.0,
-        description="Thickness in pixels of the border ring around main slots",
+        name="Slot Outline Width", default=3.0, min=1.0, max=8.0,
+        description="Thickness in pixels of the outline around main slots",
         update=_preview_redraw) # type: ignore
     slot_rim_colour: FloatVectorProperty(
-        name="Slot Rim Colour", subtype='COLOR_GAMMA', size=3,
+        name="Slot Outline Colour", subtype='COLOR_GAMMA', size=3,
         # hex #97E7FF -> (151, 231, 255) / 255 (the default-palette default; it is
         # the migration source, so the first freshly-migrated palette inherits this)
         default=(0.5921569, 0.9058824, 1.0), min=0.0, max=1.0,
-        description="Colour of the main-slot border ring and of its hover glow",
+        description="Colour of the main-slot outline and of its hover glow",
         update=_preview_redraw) # type: ignore
 
     # Hover glow (radial gradient behind the hovered slot/sub-slot)
@@ -422,19 +422,19 @@ class SculptoolsPreferences(AddonPreferences):
                     "vector from their parent slot",
         update=_preview_redraw) # type: ignore
     subslot_rim_width: FloatProperty(
-        name="Sub-slot Rim Width", default=2.0, min=1.0, max=4.0,
-        description="Thickness in pixels of the border ring around sub-slots",
+        name="Sub-slot Outline Width", default=2.0, min=1.0, max=4.0,
+        description="Thickness in pixels of the outline around sub-slots",
         update=_preview_redraw) # type: ignore
     subslot_rim_colour: FloatVectorProperty(
-        name="Sub-slot Rim Colour", subtype='COLOR_GAMMA', size=3,
+        name="Sub-slot Outline Colour", subtype='COLOR_GAMMA', size=3,
         # hex #63EBEB -> (99, 235, 235) / 255
         default=(0.3882353, 0.9215686, 0.9215686), min=0.0, max=1.0,
-        description="Colour of the sub-slot border ring and of its hover glow",
+        description="Colour of the sub-slot outline and of its hover glow",
         update=_preview_redraw) # type: ignore
 
     # Dynamic Sliders: right-click + drag to adjust brush Radius/Strength
     dynamic_sliders_enabled: BoolProperty(
-        name="Dynamic Sliders", default=True,
+        name="Dynamic Brush Sliders", default=True,
         description="Right-click + drag in the viewport to adjust brush Radius "
                     "(horizontal) and Strength (vertical). A quick right-click "
                     "still opens the native context menu",

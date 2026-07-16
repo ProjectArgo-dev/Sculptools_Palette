@@ -367,8 +367,8 @@ class SCULPTOOLS_PT_palette(Panel):
         colp.prop(pit, "name",                text="Name")
         colp.separator()
         colp.prop(pit, "num_slots",           slider=True)
-        colp.prop(pit, "slot_rim_colour",     text="Slot Rim Colour")
-        colp.prop(pit, "subslot_rim_colour",  text="Sub-slot Rim Colour")
+        colp.prop(pit, "slot_rim_colour",     text="Slot Outline Colour")
+        colp.prop(pit, "subslot_rim_colour",  text="Sub-slot Outline Colour")
         colp.separator()
         colp.operator("sculptools.reset_palette_appearance",
                       text="Reset This Palette", icon="LOOP_BACK")
