@@ -440,6 +440,17 @@ class SculptoolsPreferences(AddonPreferences):
                     "still opens the native context menu",
         update=_dynamic_sliders_toggle) # type: ignore
 
+    # Fixed Slot Outline: when on (default) slot & sub-slot outlines are always
+    # visible with their configured colour/width; when off, an outline is drawn
+    # only on hover and elements at rest show a thin 1px grey (#808080) outline.
+    fixed_slot_outline: BoolProperty(
+        name="Fixed Slot Outline", default=True,
+        description="When on, slot and sub-slot outlines are always visible with "
+                    "their configured colour and width. When off, outlines appear "
+                    "only on hover; at rest slots and sub-slots show a thin 1px "
+                    "grey outline",
+        update=_preview_redraw) # type: ignore
+
     # Quick Numbers: number keys select/cycle slot brushes without the wheel
     quick_numbers_enabled: BoolProperty(
         name="Quick Numbers", default=True,

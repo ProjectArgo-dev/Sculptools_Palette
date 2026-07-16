@@ -115,6 +115,7 @@ _APPEARANCE_PROPS = [
     "glow_size", "glow_intensity", "glow_falloff",
     "sub_size_factor", "sub_separation",
     "subslot_rim_width",
+    "fixed_slot_outline",
 ]
 
 # PER-PALETTE parameters (custom for each palette): slot count + the 2 colours.
