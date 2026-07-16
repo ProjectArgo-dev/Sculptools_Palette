@@ -432,7 +432,7 @@ class SculptoolsPreferences(AddonPreferences):
         description="Colour of the sub-slot outline and of its hover glow",
         update=_preview_redraw) # type: ignore
 
-    # Dynamic Sliders: right-click + drag to adjust brush Radius/Strength
+    # Dynamic Brush Sliders: right-click + drag to adjust brush Radius/Strength
     dynamic_sliders_enabled: BoolProperty(
         name="Dynamic Brush Sliders", default=True,
         description="Right-click + drag in the viewport to adjust brush Radius "
