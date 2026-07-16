@@ -1441,11 +1441,10 @@ def _best_label(name):
 
 
 def _slot_label_text(name):
-    """Text drawn in a slot that has no thumbnail: 'not found' for a
-    conclusively-unresolvable assignment, else the normal short label."""
-    if slot_shows_not_found(name):
-        return "not found"
-    return _best_label(name)
+    """(label, missing) for a slot with no thumbnail: ('not found', True) for a
+    conclusively-unresolvable assignment, else (short label, False)."""
+    missing = slot_shows_not_found(name)
+    return ("not found" if missing else _best_label(name)), missing
 
 
 # ── unified slot drawing ──────────────────────────────────────────────────────
@@ -1463,8 +1462,7 @@ def _draw_slot_contents(sx, sy, r, name, is_hov, alpha, fallback_label=None):
                                     (*C_TEXT[:3], alpha),
                                     max_width=r * 1.8)
         else:
-            missing = slot_shows_not_found(name)
-            label = "not found" if missing else _best_label(name)
+            label, missing = _slot_label_text(name)
             col = C_TEXT_EMPTY if missing else C_TEXT
             _draw_text_centered(label, sx, sy, 11,
                                 (*col[:3], alpha * (0.6 if missing else 1.0)),
