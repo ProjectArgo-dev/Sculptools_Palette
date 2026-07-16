@@ -215,10 +215,10 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         self._sr         = prefs.slot_radius
         self._hover_del  = prefs.hover_delay
         self._fade_out   = prefs.fade_out_duration
-        self._slot_rim_w      = prefs.slot_rim_width
-        self._sub_rim_w       = prefs.subslot_rim_width
-        self._slot_rim_c      = tuple(prefs.slot_rim_colour)
-        self._sub_rim_c       = tuple(prefs.subslot_rim_colour)
+        self._slot_outline_w      = prefs.slot_outline_width
+        self._sub_outline_w       = prefs.subslot_outline_width
+        self._slot_outline_c      = tuple(prefs.slot_outline_colour)
+        self._sub_outline_c       = tuple(prefs.subslot_outline_colour)
         self._sub_size_factor = prefs.sub_size_factor
         self._glow_size       = prefs.glow_size
         self._glow_intensity  = prefs.glow_intensity
@@ -273,8 +273,8 @@ class SCULPTOOLS_OT_radial_palette(Operator):
                            for i in range(self._num_slots)]
 
         pit = get_active_palette(context)
-        self._slot_rim_c = tuple(pit.slot_rim_colour)
-        self._sub_rim_c  = tuple(pit.subslot_rim_colour)
+        self._slot_outline_c = tuple(pit.slot_outline_colour)
+        self._sub_outline_c  = tuple(pit.subslot_outline_colour)
 
         self._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_cb, (context,), 'WINDOW', 'POST_PIXEL')
@@ -310,8 +310,8 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         self._slots = [get_slot(context, i) for i in range(self._num_slots)]
         self._sub_slots = [[get_sub(context, i, j) for j in range(NUM_SUBSLOTS)]
                            for i in range(self._num_slots)]
-        self._slot_rim_c = tuple(pit.slot_rim_colour)
-        self._sub_rim_c  = tuple(pit.subslot_rim_colour)
+        self._slot_outline_c = tuple(pit.slot_outline_colour)
+        self._sub_outline_c  = tuple(pit.subslot_outline_colour)
 
     # ── draw ──────────────────────────────────────────────────────────────────
 
@@ -342,15 +342,15 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             'sub_visible':   self._sub_vis,
             'sub_alpha':     self._sub_alpha,
             'alpha':         min(1.0, elapsed / 0.08),
-            'slot_rim_width':   self._slot_rim_w,
-            'subslot_rim_width': self._sub_rim_w,
+            'slot_outline_width':   self._slot_outline_w,
+            'subslot_outline_width': self._sub_outline_w,
             # Read colours LIVE from the active palette every frame (like
             # gear_colour below) so create/duplicate/delete/cycle reflect
-            # immediately — the cached self._slot_rim_c/_sub_rim_c only updated
+            # immediately — the cached self._slot_outline_c/_sub_outline_c only updated
             # on open/Tab, leaving new/deleted palettes showing stale colours
             # until the wheel was reopened.
-            'slot_rim_colour':  tuple(pit.slot_rim_colour),
-            'subslot_rim_colour': tuple(pit.subslot_rim_colour),
+            'slot_outline_colour':  tuple(pit.slot_outline_colour),
+            'subslot_outline_colour': tuple(pit.subslot_outline_colour),
             'sub_size_factor':  self._sub_size_factor,
             'sub_separation':   self._sub_separation,
             'glow_size':        self._glow_size,
@@ -365,7 +365,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             'gear_hovered':   self._gear_hov,
             # The gear (glyph + ring) inherits the SUB-slot colour, not the slot
             # colour (user request).
-            'gear_colour':    tuple(pit.subslot_rim_colour),
+            'gear_colour':    tuple(pit.subslot_outline_colour),
         })
         # Live Radius/Strength readout while right-dragging (reuses the Dynamic
         # Sliders overlay, which reads its own module-level state).

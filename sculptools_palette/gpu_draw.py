@@ -1280,7 +1280,7 @@ def _ring_band_radii(r, width, feather=1.0):
 
 
 def _draw_ring(cx, cy, r, width, color, n=128, feather=1.0):
-    """Filled circular rim (annulus) with an ANTIALIASED (feathered) edge.
+    """Filled circular outline (annulus) with an ANTIALIASED (feathered) edge.
     Replaces the old GL LINE_STRIP outline (line width is unreliable/clamped on
     the Vulkan backend) and the later hard-edged TRI_STRIP (whose inner/outer
     circular boundaries had no coverage AA → visible stair-stepping on the
@@ -1352,7 +1352,7 @@ def _draw_textured_disc(cx, cy, r, tex, alpha=1.0, masked=True, n=48):
     if shader is None:
         return
     rad = r * 0.92
-    # Fan: centre vertex + rim. texCoord maps the disc onto the texture's
+    # Fan: centre vertex + outline. texCoord maps the disc onto the texture's
     # inscribed circle (centre 0.5,0.5, radius 0.5) so the centred brush
     # artwork fills the slot and only the outer square margin is cropped.
     pos = [(cx, cy)]
@@ -1462,11 +1462,11 @@ def draw_palette(state):
     glow_in   = state.get('glow_intensity', 0.35)
     glow_fo   = state.get('glow_falloff', 1.0)
     glow_all  = state.get('glow_all', False)   # preview: glow on every slot
-    # Per-category rim width + colour (colour also drives that category's glow)
-    slot_rim_w  = state.get('slot_rim_width', 4.8)
-    sub_rim_w   = state.get('subslot_rim_width', 3.3)
-    slot_rim_c  = tuple(state.get('slot_rim_colour', (0.90, 0.90, 0.90)))[:3]
-    sub_rim_c   = tuple(state.get('subslot_rim_colour', (0.60, 0.60, 0.60)))[:3]
+    # Per-category outline width + colour (colour also drives that category's glow)
+    slot_outline_w  = state.get('slot_outline_width', 4.8)
+    sub_outline_w   = state.get('subslot_outline_width', 3.3)
+    slot_outline_c  = tuple(state.get('slot_outline_colour', (0.90, 0.90, 0.90)))[:3]
+    sub_outline_c   = tuple(state.get('subslot_outline_colour', (0.60, 0.60, 0.60)))[:3]
     fixed       = state.get('fixed_slot_outline', True)
     n_slots   = state.get('num_slots', len(slots) if slots else 8)
 
@@ -1498,15 +1498,15 @@ def draw_palette(state):
             # Outline colour/width from the Fixed Slot Outline rule: configured
             # sub-slot colour/width, or the thin grey resting outline at rest when
             # the toggle is off. Hover full alpha, non-hover slightly dimmer.
-            o_rgb, o_w = _outline_appearance(is_hov, fixed, sub_rim_c, sub_rim_w)
-            rim_col = (*o_rgb, sa) if is_hov else (*o_rgb, sa * 0.85)
+            o_rgb, o_w = _outline_appearance(is_hov, fixed, sub_outline_c, sub_outline_w)
+            outline_col = (*o_rgb, sa) if is_hov else (*o_rgb, sa * 0.85)
 
             if is_hov or glow_all:
-                _draw_radial_glow(sx, sy, sub_sr * glow_sz, sub_rim_c,
+                _draw_radial_glow(sx, sy, sub_sr * glow_sz, sub_outline_c,
                                   glow_in * sa, glow_fo)
             _draw_filled_circle(sx, sy, sub_sr, bg_col)
             _draw_slot_contents(sx, sy, sub_sr, name, is_hov, sa)
-            _draw_ring(sx, sy, sub_sr, o_w, rim_col)
+            _draw_ring(sx, sy, sub_sr, o_w, outline_col)
 
     for i in range(n_slots):
         a    = _slot_angle(i, n_slots)
@@ -1522,21 +1522,21 @@ def draw_palette(state):
         # Slot Outline rule: configured slot colour/width, or the thin grey resting
         # outline at rest when the toggle is off (see _outline_appearance).
         if is_empty:
-            rim_col = (*C_RING_EMPTY[:3], alpha * 0.55)
-            rim_w   = slot_rim_w
+            outline_col = (*C_RING_EMPTY[:3], alpha * 0.55)
+            outline_w   = slot_outline_w
         else:
-            o_rgb, rim_w = _outline_appearance(is_hov, fixed, slot_rim_c, slot_rim_w)
-            rim_col = (*o_rgb, alpha)
+            o_rgb, outline_w = _outline_appearance(is_hov, fixed, slot_outline_c, slot_outline_w)
+            outline_col = (*o_rgb, alpha)
 
         # In the settings preview (glow_all) show the glow on every main slot so
         # the user can judge Gradient Size/Intensity/Falloff across the wheel.
         if is_hov or glow_all:
-            _draw_radial_glow(sx, sy, sr * glow_sz, slot_rim_c,
+            _draw_radial_glow(sx, sy, sr * glow_sz, slot_outline_c,
                               glow_in * alpha, glow_fo)
         _draw_filled_circle(sx, sy, sr, bg_col)
         _draw_slot_contents(sx, sy, sr, name, is_hov, alpha,
                             fallback_label=str(i + 1))
-        _draw_ring(sx, sy, sr, rim_w, rim_col)
+        _draw_ring(sx, sy, sr, outline_w, outline_col)
 
     gpu.state.blend_set('NONE')
     gpu.state.line_width_set(1.0)

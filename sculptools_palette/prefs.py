@@ -295,11 +295,11 @@ class PaletteItem(PropertyGroup):
     sub_9_1: StringProperty(default="") # type: ignore
     sub_9_2: StringProperty(default="") # type: ignore
 
-    slot_rim_colour: FloatVectorProperty(
+    slot_outline_colour: FloatVectorProperty(
         name="Slot Outline Colour", subtype='COLOR_GAMMA', size=3,
         default=NEW_SLOT_COLOUR, min=0.0, max=1.0,
         update=_palette_colour_update) # type: ignore
-    subslot_rim_colour: FloatVectorProperty(
+    subslot_outline_colour: FloatVectorProperty(
         name="Sub-slot Outline Colour", subtype='COLOR_GAMMA', size=3,
         default=NEW_SUB_COLOUR, min=0.0, max=1.0,
         update=_palette_colour_update) # type: ignore
@@ -382,11 +382,11 @@ class SculptoolsPreferences(AddonPreferences):
         name="Sub-slot Fade Out (s)", default=0.20, min=0.02, max=2.0,
         description="How quickly sub-slots disappear after moving the cursor away",
         update=_preview_redraw) # type: ignore
-    slot_rim_width: FloatProperty(
+    slot_outline_width: FloatProperty(
         name="Slot Outline Width", default=3.0, min=1.0, max=8.0,
         description="Thickness in pixels of the outline around main slots",
         update=_preview_redraw) # type: ignore
-    slot_rim_colour: FloatVectorProperty(
+    slot_outline_colour: FloatVectorProperty(
         name="Slot Outline Colour", subtype='COLOR_GAMMA', size=3,
         # hex #97E7FF -> (151, 231, 255) / 255 (the default-palette default; it is
         # the migration source, so the first freshly-migrated palette inherits this)
@@ -421,11 +421,11 @@ class SculptoolsPreferences(AddonPreferences):
                     "Higher values push the sub-slots further out along the "
                     "vector from their parent slot",
         update=_preview_redraw) # type: ignore
-    subslot_rim_width: FloatProperty(
+    subslot_outline_width: FloatProperty(
         name="Sub-slot Outline Width", default=2.0, min=1.0, max=4.0,
         description="Thickness in pixels of the outline around sub-slots",
         update=_preview_redraw) # type: ignore
-    subslot_rim_colour: FloatVectorProperty(
+    subslot_outline_colour: FloatVectorProperty(
         name="Sub-slot Outline Colour", subtype='COLOR_GAMMA', size=3,
         # hex #63EBEB -> (99, 235, 235) / 255
         default=(0.3882353, 0.9215686, 0.9215686), min=0.0, max=1.0,
@@ -573,8 +573,8 @@ def _apply_palette_dict(pitem, d):
         setattr(pitem, f"slot_{i}", d['slots'][i])
         for j in range(NUM_SUBSLOTS):
             setattr(pitem, f"sub_{i}_{j}", d['subs'][i][j])
-    pitem.slot_rim_colour = d['slot_colour']
-    pitem.subslot_rim_colour = d['sub_colour']
+    pitem.slot_outline_colour = d['slot_colour']
+    pitem.subslot_outline_colour = d['sub_colour']
 
 
 def _read_palette_dict(pitem):
@@ -585,8 +585,8 @@ def _read_palette_dict(pitem):
         'slots': [getattr(pitem, f"slot_{i}", "") for i in range(MAX_SLOTS)],
         'subs': [[getattr(pitem, f"sub_{i}_{j}", "") for j in range(NUM_SUBSLOTS)]
                  for i in range(MAX_SLOTS)],
-        'slot_colour': tuple(pitem.slot_rim_colour),
-        'sub_colour': tuple(pitem.subslot_rim_colour),
+        'slot_colour': tuple(pitem.slot_outline_colour),
+        'sub_colour': tuple(pitem.subslot_outline_colour),
     }
 
 
@@ -602,8 +602,8 @@ def ensure_palettes(context):
             [getattr(prefs, f"slot_{i}", "") for i in range(MAX_SLOTS)],
             [[getattr(prefs, f"sub_{i}_{j}", "") for j in range(NUM_SUBSLOTS)]
              for i in range(MAX_SLOTS)],
-            tuple(getattr(prefs, "slot_rim_colour", NEW_SLOT_COLOUR)),
-            tuple(getattr(prefs, "subslot_rim_colour", NEW_SUB_COLOUR)),
+            tuple(getattr(prefs, "slot_outline_colour", NEW_SLOT_COLOUR)),
+            tuple(getattr(prefs, "subslot_outline_colour", NEW_SUB_COLOUR)),
             num_slots=int(getattr(prefs, "num_slots", DEFAULT_NUM_SLOTS)),
         )
         _apply_palette_dict(pit, d)

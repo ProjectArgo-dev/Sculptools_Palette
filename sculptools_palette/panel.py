@@ -63,10 +63,10 @@ def _draw_preview_cb():
         'sub_visible':    set(range(n)),
         'sub_alpha':      {i: 1.0 for i in range(n)},
         'alpha':          1.0,
-        'slot_rim_width':   prefs.slot_rim_width,
-        'subslot_rim_width': prefs.subslot_rim_width,
-        'slot_rim_colour':  tuple(get_active_palette(context).slot_rim_colour),
-        'subslot_rim_colour': tuple(get_active_palette(context).subslot_rim_colour),
+        'slot_outline_width':   prefs.slot_outline_width,
+        'subslot_outline_width': prefs.subslot_outline_width,
+        'slot_outline_colour':  tuple(get_active_palette(context).slot_outline_colour),
+        'subslot_outline_colour': tuple(get_active_palette(context).subslot_outline_colour),
         'sub_size_factor':  prefs.sub_size_factor,
         'sub_separation':   sep_eff,
         'glow_size':        prefs.glow_size,
@@ -112,10 +112,10 @@ def _tag_redraw_view3d(context):
 # num_slots and the colours are NOT here: they are per-palette.
 _APPEARANCE_PROPS = [
     "palette_radius", "slot_radius",
-    "slot_rim_width",
+    "slot_outline_width",
     "glow_size", "glow_intensity", "glow_falloff",
     "sub_size_factor", "sub_separation",
-    "subslot_rim_width",
+    "subslot_outline_width",
     "fixed_slot_outline",
 ]
 
@@ -130,7 +130,7 @@ class SCULPTOOLS_OT_reset_palette_appearance(Operator):
     bl_idname   = "sculptools.reset_palette_appearance"
     bl_label    = "Reset This Palette"
     bl_description = ("Reset THIS palette completely: clear every slot/sub-slot "
-                      "and restore its number of slots and the two rim colours "
+                      "and restore its number of slots and the two outline colours "
                       "to defaults. Does not touch universal settings or other "
                       "palettes")
     bl_options  = {'INTERNAL'}
@@ -147,11 +147,11 @@ class SCULPTOOLS_OT_reset_palette_appearance(Operator):
         # Colours: the FIRST palette (index 0) reverts to the default-palette
         # colours; the others to the PaletteItem default ("new" colours).
         if get_prefs(context).active_palette_index == 0:
-            pit.slot_rim_colour    = DEFAULT_SLOT_COLOUR
-            pit.subslot_rim_colour = DEFAULT_SUB_COLOUR
+            pit.slot_outline_colour    = DEFAULT_SLOT_COLOUR
+            pit.subslot_outline_colour = DEFAULT_SUB_COLOUR
         else:
-            pit.property_unset("slot_rim_colour")
-            pit.property_unset("subslot_rim_colour")
+            pit.property_unset("slot_outline_colour")
+            pit.property_unset("subslot_outline_colour")
         for i in range(MAX_SLOTS):
             set_slot(context, i, "")
             for j in range(NUM_SUBSLOTS):
@@ -369,8 +369,8 @@ class SCULPTOOLS_PT_palette(Panel):
         colp.prop(pit, "name",                text="Name")
         colp.separator()
         colp.prop(pit, "num_slots",           slider=True)
-        colp.prop(pit, "slot_rim_colour",     text="Slot Outline Colour")
-        colp.prop(pit, "subslot_rim_colour",  text="Sub-slot Outline Colour")
+        colp.prop(pit, "slot_outline_colour",     text="Slot Outline Colour")
+        colp.prop(pit, "subslot_outline_colour",  text="Sub-slot Outline Colour")
         colp.separator()
         colp.operator("sculptools.reset_palette_appearance",
                       text="Reset This Palette", icon="LOOP_BACK")
@@ -385,8 +385,8 @@ class SCULPTOOLS_PT_palette(Panel):
         col = box.column(align=True)
         col.prop(prefs, "palette_radius",     slider=True)
         col.prop(prefs, "slot_radius",        slider=True)
-        col.prop(prefs, "slot_rim_width",     slider=True)
-        col.prop(prefs, "subslot_rim_width",  slider=True)
+        col.prop(prefs, "slot_outline_width",     slider=True)
+        col.prop(prefs, "subslot_outline_width",  slider=True)
         col.separator()
         col.prop(prefs, "glow_intensity",     slider=True)
         col.prop(prefs, "fixed_slot_outline")
