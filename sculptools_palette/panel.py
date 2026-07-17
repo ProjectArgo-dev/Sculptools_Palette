@@ -407,6 +407,11 @@ class SCULPTOOLS_PT_palette(Panel):
         col.separator()
         col.operator("sculptools.reset_all_palettes",
                      text="Reset All Palettes", icon="TRASH")
+        col.separator()
+        col.operator("sculptools.export_palettes", text="Export Palettes…",
+                     icon="EXPORT")
+        col.operator("sculptools.import_palettes", text="Import Palettes…",
+                     icon="IMPORT")
 
 
 class SCULPTOOLS_PT_palette_utils(Panel):
