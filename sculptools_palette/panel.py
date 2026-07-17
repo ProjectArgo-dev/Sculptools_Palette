@@ -262,7 +262,7 @@ class SCULPTOOLS_OT_cycle_palette_back_holder(Operator):
 class SCULPTOOLS_OT_toggle_preview(Operator):
     bl_idname   = "sculptools.toggle_preview"
     bl_label    = "Toggle Palette Preview"
-    bl_description = "Temporarily show the pie palette in the viewport"
+    bl_description = "Show/Hide the Palette preview editor in the viewport."
     bl_options  = {'INTERNAL'}
 
     def execute(self, context):
@@ -390,6 +390,9 @@ class SCULPTOOLS_PT_palette(Panel):
         col.separator()
         col.prop(prefs, "glow_intensity",     slider=True)
         col.prop(prefs, "fixed_slot_outline")
+        if not prefs.fixed_slot_outline:
+            col.label(text='Turning "Fixed Slot Outline" ON while tuning the '
+                           'Palette appearance is suggested.', icon="INFO")
         # Gradient Size/Falloff, Sub-slot Size and Sub-slot Distance are NO longer
         # exposed in the panel (user request): they remain active properties with
         # their defaults (1.6 / 2.5 / 0.70 / 55.0) and are still read by

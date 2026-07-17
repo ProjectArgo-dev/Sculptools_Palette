@@ -401,7 +401,7 @@ class SculptoolsPreferences(AddonPreferences):
         update=_preview_redraw) # type: ignore
     glow_intensity: FloatProperty(
         name="Gradient Intensity", default=1.0, min=0.0, max=1.0,
-        description="Opacity of the hover glow at its centre",
+        description="Hover glow opacity.",
         update=_preview_redraw) # type: ignore
     glow_falloff: FloatProperty(
         name="Gradient Falloff", default=2.5, min=0.2, max=5.0,
@@ -447,8 +447,7 @@ class SculptoolsPreferences(AddonPreferences):
         name="Fixed Slot Outline", default=True,
         description="When on, slot and sub-slot outlines are always visible with "
                     "their configured colour and width. When off, outlines appear "
-                    "only on hover; at rest slots and sub-slots show a thin 1px "
-                    "grey outline",
+                    "only on hover",
         update=_preview_redraw) # type: ignore
 
     # Quick Numbers: number keys select/cycle slot brushes without the wheel
