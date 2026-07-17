@@ -16,7 +16,7 @@ or tap a number to switch — then get back to sculpting.
 
 ## Features
 
-- **Radial palette menu**, instant access to your brushes and tools.
+- **Radial Palette menu**, instant access to your brushes and tools.
 - **Dynamic Brush Sliders** — right-click + drag to tune brush Radius and Strength.
 - **Brushes _and_ Sculpt tools in the same wheel** — Mask, Face Sets, Trim, Line Project,
   Mesh / Cloth / Color Filter and more.
