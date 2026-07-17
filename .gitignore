@@ -18,6 +18,18 @@ Desktop.ini
 /scratch/
 /tmp/
 
-# Marketing / promotional material — NOT part of the add-on itself, never commit
-# (store listings, community/launch posts, video scripts, promo assets)
-docs/store/
+# ── Public repo scope ────────────────────────────────────────────────────────
+# The published GitHub repo must contain ONLY the add-on package (everything that
+# ships inside the extension .zip: sculptools_palette/). Everything below is kept
+# LOCALLY for development but is never committed / pushed:
+#   - marketing / promotional material (store listings, launch posts, promo assets)
+#   - project docs & AI-assistant context / dev handoff
+#   - the dev-only validation harness and icon-generation scripts
+#   - built release artifacts (distributed via GitHub Releases / extensions.blender.org)
+/docs/
+/sculptools_validation/
+/releases/
+/dev_*.py
+CLAUDE.md
+STORE_LISTING.md
+sculptools_handoff.md
