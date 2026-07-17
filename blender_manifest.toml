@@ -42,6 +42,7 @@ paths_exclude_pattern = [
   "/.gitignore",
   "/.superpowers/",
   "/docs/",
+  "/images/",
   "/sculptools_validation/",
   "/releases/",
   "/dev_extract_tool_icons.py",

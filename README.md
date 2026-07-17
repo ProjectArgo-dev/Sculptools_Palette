@@ -1,3 +1,5 @@
+![Sculptools: Palette](images/palette_banner_kofi.jpg)
+
 # Sculptools: Palette
 
 **A radial (pie) menu that puts your favourite sculpt brushes _and_ tools one keystroke away.**
