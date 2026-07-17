@@ -29,3 +29,26 @@ copyright = [
 # No [permissions] section: the slot "clipboard" is an internal Python dict (not
 # the system clipboard) and the only files read are the PNG icons bundled in the
 # package plus Blender's own assets accessed via system_resource.
+
+# The add-on package lives at the REPO ROOT (built with --source-dir .). Everything
+# that is not part of the shipped extension is excluded here so it never ends up in
+# the .zip: the dev validation harness, icon-generation scripts, project docs /
+# AI-assistant context, build artefacts, and repo metadata. README.md and LICENSE
+# are intentionally NOT excluded — they ship with the extension.
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "/.gitignore",
+  "/.superpowers/",
+  "/docs/",
+  "/sculptools_validation/",
+  "/releases/",
+  "/dev_extract_tool_icons.py",
+  "/dev_make_action_icons.py",
+  "/dev_make_eye_icon.py",
+  "/dev_make_gear_icon.py",
+  "/CLAUDE.md",
+  "/sculptools_handoff.md",
+  "/STORE_LISTING.md",
+]
