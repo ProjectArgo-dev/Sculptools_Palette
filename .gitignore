@@ -17,3 +17,7 @@ Desktop.ini
 # Scratch / temp
 /scratch/
 /tmp/
+
+# Marketing / promotional material — NOT part of the add-on itself, never commit
+# (store listings, community/launch posts, video scripts, promo assets)
+docs/store/
