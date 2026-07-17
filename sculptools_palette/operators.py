@@ -1,8 +1,12 @@
 # sculptools_palette/operators.py
 
+import json
+import os
+
 import bpy
 from bpy.types import Operator, Menu
 from bpy.props import StringProperty, IntProperty, BoolProperty
+from bpy_extras.io_utils import ExportHelper, ImportHelper
 
 ASSET_FILE = "brushes/essentials_brushes-mesh_sculpt.blend"
 
@@ -726,6 +730,202 @@ class SCULPTOOLS_MT_palette_context(Menu):
         row3 = layout.row(); row3.enabled = can_delete(n)
         row3.operator("sculptools.delete_palette_menu", text="Delete This Palette",
                      icon="TRASH")
+        layout.separator()
+        layout.operator("sculptools.export_palettes_menu", text="Export Palettes…",
+                       icon="EXPORT")
+        layout.operator("sculptools.import_palettes_menu", text="Import Palettes…",
+                       icon="IMPORT")
+
+
+# ── Palette preset Import / Export ────────────────────────────────────────────
+
+def _addon_version_string():
+    """Read version from blender_manifest.toml (source of truth). Diagnostic
+    only in the export file; never enforced on import."""
+    try:
+        import tomllib
+        path = os.path.join(os.path.dirname(__file__), "blender_manifest.toml")
+        with open(path, "rb") as f:
+            return str(tomllib.load(f).get("version", "unknown"))
+    except Exception:
+        return "unknown"
+
+
+def _read_appearance(prefs):
+    from .panel import _APPEARANCE_PROPS
+    out = {}
+    for k in _APPEARANCE_PROPS:
+        try:
+            v = getattr(prefs, k)
+            out[k] = bool(v) if isinstance(v, bool) else float(v)
+        except Exception:
+            pass
+    return out
+
+
+def _available_brush_names(context):
+    """Best-effort set of brush names resolvable now. Runs the one allowed
+    Essentials preload so bundled brushes count as present (Golden Rule #3:
+    this is the designated load, guarded to run once)."""
+    from . import gpu_draw
+    try:
+        gpu_draw.preload_bundled_previews()
+    except Exception:
+        pass
+    names = set(bpy.data.brushes.keys())
+    from .prefs import get_prefs
+    for pit in get_prefs(context).palettes:
+        from .prefs import _read_palette_dict
+        d = _read_palette_dict(pit)
+        for n in d['slots']:
+            if n and gpu_draw.brush_name_available(n):
+                names.add(n)
+        for row in d['subs']:
+            for n in row:
+                if n and gpu_draw.brush_name_available(n):
+                    names.add(n)
+    return names
+
+
+class SCULPTOOLS_OT_export_palettes(Operator, ExportHelper):
+    bl_idname   = "sculptools.export_palettes"
+    bl_label    = "Export Palettes"
+    bl_description = "Save all palettes and appearance settings to a .json preset file"
+    bl_options  = {'INTERNAL'}
+    filename_ext = ".json"
+    filter_glob: StringProperty(default="*.json", options={'HIDDEN'}) # type: ignore
+
+    def invoke(self, context, event):
+        if not self.filepath:
+            self.filepath = "sculptools_palettes.json"
+        return ExportHelper.invoke(self, context, event)
+
+    def execute(self, context):
+        from .prefs import ensure_palettes, get_prefs, _read_palette_dict
+        from . import presets
+        ensure_palettes(context)
+        prefs = get_prefs(context)
+        palette_dicts = [_read_palette_dict(p) for p in prefs.palettes]
+        data = presets.build_preset_dict(
+            palette_dicts, _read_appearance(prefs),
+            _addon_version_string(), tuple(bpy.app.version))
+        try:
+            with open(self.filepath, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except OSError as exc:
+            self.report({'ERROR'}, f"Could not write file: {exc}")
+            return {'CANCELLED'}
+        self.report({'INFO'},
+                    f"Exported {len(palette_dicts)} palettes to "
+                    f"{os.path.basename(self.filepath)}")
+        return {'FINISHED'}
+
+
+class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
+    bl_idname   = "sculptools.import_palettes"
+    bl_label    = "Import Palettes"
+    bl_description = "Replace ALL palettes with those from a .json preset file"
+    bl_options  = {'INTERNAL'}
+    filter_glob: StringProperty(default="*.json", options={'HIDDEN'}) # type: ignore
+
+    def draw(self, context):
+        col = self.layout.column()
+        col.label(text="Replaces ALL current palettes", icon='ERROR')
+
+    def execute(self, context):
+        from .prefs import (ensure_palettes, get_prefs, _apply_palette_dict,
+                            request_prefs_save, MAX_PALETTES)
+        from .panel import _APPEARANCE_PROPS, _tag_redraw_view3d
+        from . import presets, gpu_draw
+
+        # 1. read + parse (non-destructive)
+        try:
+            with open(self.filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError) as exc:
+            self.report({'ERROR'}, f"Not a valid preset file: {exc}")
+            return {'CANCELLED'}
+
+        # 2. validate
+        ok, err = presets.validate_preset(data)
+        if not ok:
+            self.report({'ERROR'}, err)
+            return {'CANCELLED'}
+
+        # 3. build fully in memory (still non-destructive)
+        sanitized, skipped = [], 0
+        for raw in data["palettes"]:
+            s = presets.sanitize_palette_dict(raw)
+            if s is None:
+                skipped += 1
+            else:
+                sanitized.append(s)
+        if not sanitized:
+            self.report({'ERROR'}, "No usable palettes to import")
+            return {'CANCELLED'}
+        clamped = 0
+        if len(sanitized) > MAX_PALETTES:
+            clamped = len(sanitized) - MAX_PALETTES
+            sanitized = sanitized[:MAX_PALETTES]
+        appearance = presets.sanitize_appearance(data.get("appearance", {}),
+                                                 _APPEARANCE_PROPS)
+
+        # 4. atomic swap
+        ensure_palettes(context)
+        prefs = get_prefs(context)
+        prefs.palettes.clear()
+        for s in sanitized:
+            _apply_palette_dict(prefs.palettes.add(), s)
+        for k, v in appearance.items():
+            try:
+                setattr(prefs, k, v)
+            except Exception:
+                pass
+        prefs.active_palette_index = 0
+
+        # 5. count availability + persist + redraw
+        found, total = presets.count_available_entries(
+            sanitized, _available_brush_names(context), tuple(bpy.app.version))
+        request_prefs_save()
+        _tag_redraw_view3d(context)
+
+        msg = (f"Imported {len(sanitized)} palettes — "
+               f"{found}/{total} brushes & tools available")
+        self.report({'INFO'}, msg)
+        if skipped or clamped:
+            self.report({'WARNING'},
+                        f"Skipped {skipped} malformed and {clamped} over-limit palettes")
+        return {'FINISHED'}
+
+
+class SCULPTOOLS_OT_export_palettes_menu(Operator):
+    """Gear-menu launcher for Export (execute-only, INVOKE_DEFAULT delegate) —
+    same pattern as rename/delete so the file browser opens while the wheel
+    modal holds the input grab."""
+    bl_idname   = "sculptools.export_palettes_menu"
+    bl_label    = "Export Palettes"
+    bl_options  = {'INTERNAL'}
+
+    def execute(self, context):
+        try:
+            bpy.ops.sculptools.export_palettes('INVOKE_DEFAULT')
+        except Exception as exc:
+            print(f"Sculptools: export browser failed to open: {exc}")
+        return {'FINISHED'}
+
+
+class SCULPTOOLS_OT_import_palettes_menu(Operator):
+    """Gear-menu launcher for Import. Same indirection as export_palettes_menu."""
+    bl_idname   = "sculptools.import_palettes_menu"
+    bl_label    = "Import Palettes"
+    bl_options  = {'INTERNAL'}
+
+    def execute(self, context):
+        try:
+            bpy.ops.sculptools.import_palettes('INVOKE_DEFAULT')
+        except Exception as exc:
+            print(f"Sculptools: import browser failed to open: {exc}")
+        return {'FINISHED'}
 
 
 # ── All classes ───────────────────────────────────────────────────────────────
@@ -754,5 +954,9 @@ all_operator_classes = [
     SCULPTOOLS_OT_delete_palette,
     SCULPTOOLS_OT_delete_palette_menu,
     SCULPTOOLS_OT_jump_palette,
+    SCULPTOOLS_OT_export_palettes,
+    SCULPTOOLS_OT_export_palettes_menu,
+    SCULPTOOLS_OT_import_palettes,
+    SCULPTOOLS_OT_import_palettes_menu,
     SCULPTOOLS_MT_palette_context,
 ]
