@@ -8,6 +8,7 @@ import bpy
 persistent = bpy.app.handlers.persistent
 from .prefs    import SculptoolsPreferences, PaletteItem, MAX_PALETTES
 from .operators import (all_operator_classes, brush_context_menu,
+                       toolbar_tool_context_menu,
                        SCULPTOOLS_OT_jump_palette)
 from .modal    import SCULPTOOLS_OT_radial_palette
 from .dynamic_sliders import (SCULPTOOLS_OT_dynamic_sliders,
@@ -172,6 +173,7 @@ def register():
             _addon_keymaps.append((km, kmi_jump))
 
     bpy.types.VIEW3D_MT_brush_context_menu.append(brush_context_menu)
+    bpy.types.UI_MT_button_context_menu.append(toolbar_tool_context_menu)
     if _sculptools_load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_sculptools_load_post)
     enable_preview_handler()
@@ -230,6 +232,7 @@ def unregister():
     stop_preview_queue()
     clear_texture_cache()
     bpy.types.VIEW3D_MT_brush_context_menu.remove(brush_context_menu)
+    bpy.types.UI_MT_button_context_menu.remove(toolbar_tool_context_menu)
     for km, kmi in _addon_keymaps:
         km.keymap_items.remove(kmi)
     _addon_keymaps.clear()

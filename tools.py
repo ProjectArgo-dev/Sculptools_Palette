@@ -93,6 +93,21 @@ TOOLS = [
 
 _BY_KEY = {e.key: e for e in TOOLS}
 
+# Reverse index: Blender toolbar tool idname -> catalogue key. Only interactive
+# TOOL-kind entries have a toolbar button (wm.tool_set_by_id); one-shot OP actions
+# (Clear Mask, ...) never appear in the toolbar, so they are excluded here.
+_BY_TARGET = {e.target: e.key for e in TOOLS if e.kind == 'TOOL'}
+
+
+def key_for_tool_target(idname):
+    """Catalogue key for a Blender toolbar tool idname (e.g. 'builtin.box_mask'
+    -> 'box_mask'), or None when that idname is not a TOOL in this catalogue.
+    Used by the toolbar right-click hook to decide whether to offer
+    "Add Tool to Palette". Pure (no bpy)."""
+    if not isinstance(idname, str):
+        return None
+    return _BY_TARGET.get(idname)
+
 
 def is_tool_spec(spec):
     """True iff a slot string is a tool spec ('tool:<key>')."""

@@ -4,7 +4,7 @@ import json
 import os
 
 import bpy
-from bpy.types import Operator, Menu
+from bpy.types import Operator, Menu, Panel
 from bpy.props import StringProperty, IntProperty, BoolProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
@@ -29,6 +29,78 @@ _assign_target = {'slot': -1, 'sub': -1}
 
 # ── Slot assignment popup ─────────────────────────────────────────────────────
 
+# The brush/tool being assigned, stashed for SCULPTOOLS_MT_assign_to_slot.draw
+# (a Menu cannot carry operator args; same pattern as _assign_target below).
+_assign_brush = {'name': ''}
+
+
+def _draw_assign_picker(layout, context, brush_name):
+    """Body of the assign picker: a friendly title, the active palette's name,
+    then one row per slot and sub-slot — each a confirm_assign button that writes
+    brush_name (a bare brush name OR a 'tool:<key>' spec) to that target. Same
+    box layout as the original invoke_popup, but drawn by a registered Menu so it
+    auto-dismisses the moment a row is clicked (see SCULPTOOLS_MT_assign_to_slot).
+    """
+    from .prefs import (get_slot, get_sub, get_num_slots,
+                        SUB_CYCLE_ORDER, sub_display_number,
+                        get_active_palette)
+    from .tools import is_tool_spec, best_tool_label, get_tool
+    def _disp(n):
+        return best_tool_label(n) if is_tool_spec(n) else n
+    # Friendly title: a tool spec ("tool:box_mask") shows the tool's display name
+    # + tool icon; a bare brush name is shown verbatim.
+    if is_tool_spec(brush_name):
+        entry = get_tool(brush_name)
+        title = entry.display if entry else best_tool_label(brush_name)
+        title_icon = "TOOL_SETTINGS"
+    else:
+        title = brush_name
+        title_icon = "BRUSHES_ALL"
+    layout.label(text=f'Assign  "{title}"  to:', icon=title_icon)
+    # Show WHICH palette the slots/subs listed below belong to.
+    layout.label(text=f'Palette:  {get_active_palette(context).name}',
+                 icon="RESTRICT_SELECT_OFF")
+    layout.separator()
+    for i in range(get_num_slots(context)):
+        main = get_slot(context, i)
+        box  = layout.box()
+        row = box.row()
+        lbl = f"Slot {i+1}  —  {_disp(main)}" if main else f"Slot {i+1}  —  empty"
+        op  = row.operator("sculptools.confirm_assign", text=lbl,
+                           icon="RADIOBUT_ON" if main else "RADIOBUT_OFF")
+        op.slot_index = i
+        op.sub_index  = -1
+        op.brush_name = brush_name
+        for j in SUB_CYCLE_ORDER:
+            sub = get_sub(context, i, j)
+            row2 = box.row()
+            row2.separator()
+            num  = sub_display_number(j)
+            lbl2 = f"  Sub {num}  —  {_disp(sub)}" if sub else f"  Sub {num}  —  empty"
+            op2  = row2.operator("sculptools.confirm_assign", text=lbl2,
+                                 icon="DOT")
+            op2.slot_index = i
+            op2.sub_index  = j
+            op2.brush_name = brush_name
+
+
+class SCULPTOOLS_PT_assign_to_slot(Panel):
+    # A popup PANEL, not a Menu: a Panel stacks its box() rows vertically exactly
+    # like the old invoke_popup (menus lay box() out in a broken diagonal
+    # cascade). Shown via wm.call_panel(keep_open=False), which — unlike
+    # invoke_popup — dismisses itself the instant a row is clicked. bl_space_type/
+    # region are only formal requirements; the panel never docks anywhere, it is
+    # only ever raised as a call_panel popup.
+    bl_idname = "SCULPTOOLS_PT_assign_to_slot"
+    bl_label  = "Add to Palette"
+    bl_space_type  = 'VIEW_3D'
+    bl_region_type = 'WINDOW'
+    bl_options = {'INSTANCED'}
+
+    def draw(self, context):
+        _draw_assign_picker(self.layout, context, _assign_brush.get('name', ''))
+
+
 class SCULPTOOLS_OT_assign_to_slot(Operator):
     bl_idname   = "sculptools.assign_to_slot"
     bl_label    = "Add brush to Palette"
@@ -38,51 +110,20 @@ class SCULPTOOLS_OT_assign_to_slot(Operator):
     brush_name: StringProperty() # type: ignore
 
     def invoke(self, context, event):
-        return context.window_manager.invoke_popup(self, width=260)
-
-    def draw(self, context):
-        from .prefs import (get_slot, get_sub, get_num_slots,
-                            SUB_CYCLE_ORDER, sub_display_number,
-                            get_active_palette)
-        from .tools import is_tool_spec, best_tool_label
-        def _disp(n):
-            return best_tool_label(n) if is_tool_spec(n) else n
-        layout = self.layout
-        layout.label(text=f'Assign  "{self.brush_name}"  to:', icon="BRUSHES_ALL")
-        # Show WHICH palette the slots/subs listed below belong to, so it is
-        # clear where we are assigning the brush (these are the active palette's slots).
-        layout.label(text=f'Palette:  {get_active_palette(context).name}',
-                     icon="RESTRICT_SELECT_OFF")
-        layout.separator()
-        for i in range(get_num_slots(context)):
-            main = get_slot(context, i)
-            box  = layout.box()
-            row = box.row()
-            lbl = f"Slot {i+1}  —  {_disp(main)}" if main else f"Slot {i+1}  —  empty"
-            op  = row.operator("sculptools.confirm_assign", text=lbl,
-                               icon="RADIOBUT_ON" if main else "RADIOBUT_OFF")
-            op.slot_index = i
-            op.sub_index  = -1
-            op.brush_name = self.brush_name
-            for j in SUB_CYCLE_ORDER:
-                sub = get_sub(context, i, j)
-                row2 = box.row()
-                row2.separator()
-                num  = sub_display_number(j)
-                lbl2 = f"  Sub {num}  —  {_disp(sub)}" if sub else f"  Sub {num}  —  empty"
-                op2  = row2.operator("sculptools.confirm_assign", text=lbl2,
-                                     icon="DOT")
-                op2.slot_index = i
-                op2.sub_index  = j
-                op2.brush_name = self.brush_name
-
-    def execute(self, context):
+        # Raise the picker as a call_panel popup with keep_open=False so it closes
+        # the instant a slot/sub row is clicked (see SCULPTOOLS_PT_assign_to_slot).
+        # brush_name is handed over via the module stash because a panel, like a
+        # menu, takes no operator args.
+        _assign_brush['name'] = self.brush_name
+        bpy.ops.wm.call_panel('INVOKE_DEFAULT',
+                              name="SCULPTOOLS_PT_assign_to_slot", keep_open=False)
         return {'FINISHED'}
 
 
 class SCULPTOOLS_OT_confirm_assign(Operator):
     bl_idname = "sculptools.confirm_assign"
     bl_label  = "Confirm Assignment"
+    bl_description = "Assign to this slot / sub-slot"
     bl_options = {'REGISTER'}
 
     slot_index: IntProperty(default=0)  # type: ignore
@@ -140,6 +181,59 @@ def brush_context_menu(self, context):
         self.layout.operator("sculptools.shelf_add_to_palette",
                              text="Add brush to Palette",
                              icon="BRUSHES_ALL")
+
+
+# ── Toolbar tool right-click hook ─────────────────────────────────────────────
+#
+# Right-clicking a tool icon in the viewport toolbar opens Blender's generic
+# button context menu (UI_MT_button_context_menu). The clicked tool button is a
+# wm.tool_set_by_id operator whose `.name` is the tool idname (e.g.
+# "builtin.box_mask"); that idname maps 1:1 to our catalogue via
+# tools.key_for_tool_target. We add "Add Tool to Palette" only in Sculpt Mode and
+# only when the clicked tool is one of ours, then reuse the very same slot picker
+# as "Add brush to Palette" by passing the "tool:<key>" spec as brush_name.
+
+class SCULPTOOLS_OT_toolbar_add(Operator):
+    bl_idname   = "sculptools.toolbar_add_tool_to_palette"
+    bl_label    = "Add Tool to Palette"
+    bl_description = "Assign this Sculpt tool to a slot in the active palette"
+    bl_options  = {'REGISTER'}
+
+    # Captured at draw time from context.button_operator.name, so execute() does
+    # not depend on the button context still being live (mirrors the shelf hook,
+    # which passes brush_name).
+    tool_idname: StringProperty()  # type: ignore
+
+    def execute(self, context):
+        from .tools import key_for_tool_target, TOOL_PREFIX
+        key = key_for_tool_target(self.tool_idname)
+        if not key:
+            self.report({'WARNING'}, "Sculptools: not a palette tool")
+            return {'CANCELLED'}
+        bpy.ops.sculptools.assign_to_slot('INVOKE_DEFAULT',
+                                          brush_name=f"{TOOL_PREFIX}{key}")
+        return {'FINISHED'}
+
+
+def toolbar_tool_context_menu(self, context):
+    if context.mode != 'SCULPT':
+        return
+    op = getattr(context, "button_operator", None)
+    if op is None or op.bl_rna.identifier != "WM_OT_tool_set_by_id":
+        return
+    from .tools import get_tool, tool_available, key_for_tool_target
+    idname = getattr(op, "name", "")
+    key = key_for_tool_target(idname)
+    if not key:
+        return
+    entry = get_tool(key)
+    if not entry or not tool_available(entry, bpy.app.version):
+        return
+    layout = self.layout
+    layout.separator()
+    add = layout.operator("sculptools.toolbar_add_tool_to_palette",
+                          text="Add Tool to Palette", icon="TOOL_SETTINGS")
+    add.tool_idname = idname
 
 
 # ── Palette slot right-click context menu ─────────────────────────────────────
@@ -921,10 +1015,12 @@ class SCULPTOOLS_OT_import_palettes_menu(Operator):
 # ── All classes ───────────────────────────────────────────────────────────────
 
 all_operator_classes = [
+    SCULPTOOLS_PT_assign_to_slot,
     SCULPTOOLS_OT_assign_to_slot,
     SCULPTOOLS_OT_confirm_assign,
     SCULPTOOLS_OT_clear_slot,
     SCULPTOOLS_OT_shelf_add,
+    SCULPTOOLS_OT_toolbar_add,
     SCULPTOOLS_MT_slot_actions_main,
     SCULPTOOLS_MT_slot_actions_sub0,
     SCULPTOOLS_MT_slot_actions_sub1,
