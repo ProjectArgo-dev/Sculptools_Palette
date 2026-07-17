@@ -852,23 +852,12 @@ class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
             self.report({'ERROR'}, err)
             return {'CANCELLED'}
 
-        # 3. build fully in memory (still non-destructive)
-        sanitized, skipped = [], 0
-        for raw in data["palettes"]:
-            s = presets.sanitize_palette_dict(raw)
-            if s is None:
-                skipped += 1
-            else:
-                sanitized.append(s)
+        # 3. build the full plan in memory (still non-destructive)
+        sanitized, appearance, skipped, clamped = presets.build_import_plan(
+            data, MAX_PALETTES, _APPEARANCE_PROPS)
         if not sanitized:
             self.report({'ERROR'}, "No usable palettes to import")
             return {'CANCELLED'}
-        clamped = 0
-        if len(sanitized) > MAX_PALETTES:
-            clamped = len(sanitized) - MAX_PALETTES
-            sanitized = sanitized[:MAX_PALETTES]
-        appearance = presets.sanitize_appearance(data.get("appearance", {}),
-                                                 _APPEARANCE_PROPS)
 
         # 4. atomic swap
         ensure_palettes(context)

@@ -126,3 +126,30 @@ def count_available_entries(palette_dicts, available_brush_names, blender_versio
             if avail:
                 found += 1
     return found, total
+
+
+def build_import_plan(data, max_palettes, known_appearance_keys):
+    """From a preset dict (validate_preset assumed already passed), produce the
+    ready-to-apply import plan: (sanitized_palettes, appearance, skipped, clamped).
+
+    - sanitized_palettes: each raw entry through sanitize_palette_dict, dropping
+      the unusable ones, then truncated to max_palettes.
+    - appearance: sanitize_appearance over the recognised keys.
+    - skipped: count of malformed entries dropped by sanitize_palette_dict.
+    - clamped: count of entries removed by the max_palettes truncation.
+
+    Pure — no bpy, no I/O. The caller does the atomic swap and decides what an
+    empty sanitized list means (CANCELLED)."""
+    sanitized, skipped = [], 0
+    for raw in data.get("palettes", []):
+        s = sanitize_palette_dict(raw)
+        if s is None:
+            skipped += 1
+        else:
+            sanitized.append(s)
+    clamped = 0
+    if len(sanitized) > max_palettes:
+        clamped = len(sanitized) - max_palettes
+        sanitized = sanitized[:max_palettes]
+    appearance = sanitize_appearance(data.get("appearance", {}), known_appearance_keys)
+    return sanitized, appearance, skipped, clamped
