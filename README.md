@@ -6,6 +6,10 @@ Stop hunting through the Asset Shelf. Press one key in Blender's **Sculpt Mode**
 wheel of your hand-picked brushes and tools opens right under the cursor. Flick, click,
 or tap a number to switch — then get back to sculpting.
 
+**Find it useful?** Consider tipping at:
+
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Z8F0234LJP)
+
 <!-- Add a demo GIF or screenshot here, e.g. ![Sculptools: Palette](docs/demo.gif) -->
 
 ## Features
