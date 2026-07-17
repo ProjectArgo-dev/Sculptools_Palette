@@ -16,19 +16,16 @@ or tap a number to switch — then get back to sculpting.
 
 ## Features
 
-- **Radial brush + tool menu**, opened with a single key (default `\`).
-- **Up to 8 palettes**, each with 10 main slots × 3 sub-slots — group related brushes
-  together (e.g. Draw → Clay Strips, Crease Sharp, Blob) and switch whole sets instantly.
+- **Radial palette menu**, instant access to your brushes and tools.
+- **Dynamic Brush Sliders** — right-click + drag to tune brush Radius and Strength.
 - **Brushes _and_ Sculpt tools in the same wheel** — Mask, Face Sets, Trim, Line Project,
   Mesh / Cloth / Color Filter and more.
-- **Real thumbnails** pulled from Blender's Essentials library and your own custom brush
-  asset libraries, so the wheel looks exactly like your Asset Shelf.
+- **Up to 8 palettes**, each with 10 main slots × 3 sub-slots — group related brushes
+  together (e.g. Draw → Clay Strips, Crease Sharp, Blob) and switch whole sets instantly.
 - **Quick Numbers** — press a number key to activate a slot without opening the wheel.
-- **Dynamic Brush Sliders** — right-click + drag to tune brush Radius and Strength.
-- **Import / Export presets** — save all palettes and their look to a shareable `.json`
-  file and restore them on any machine.
-- **Fully configurable** — every shortcut can be rebound or turned off.
-- **100% offline** — no internet connection, no account, no external downloads.
+- **Import / Export presets** — backup your palettes and their look to a shareable file.
+- **Real thumbnails** directly loaded from your Asset libraries.
+- **Fully configurable** — dedicated **N** panel visible in Sculpt Mode.
 
 ## Requirements
 
@@ -37,7 +34,7 @@ or tap a number to switch — then get back to sculpting.
 ## Installation
 
 **From the Blender Extensions Platform (recommended)**
-Once published, install it directly from Blender: **Edit ▸ Preferences ▸ Get Extensions**,
+Install it directly from Blender: **Edit ▸ Preferences ▸ Get Extensions**,
 search for *Sculptools: Palette*, and click **Install**.
 
 **Manual install from a `.zip`**
