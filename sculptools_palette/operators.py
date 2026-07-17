@@ -891,10 +891,11 @@ class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
 
         msg = (f"Imported {len(sanitized)} palettes — "
                f"{found}/{total} brushes & tools available")
-        self.report({'INFO'}, msg)
         if skipped or clamped:
-            self.report({'WARNING'},
-                        f"Skipped {skipped} malformed and {clamped} over-limit palettes")
+            msg += f" ({skipped} malformed and {clamped} over-limit skipped)"
+            self.report({'WARNING'}, msg)
+        else:
+            self.report({'INFO'}, msg)
         return {'FINISHED'}
 
 

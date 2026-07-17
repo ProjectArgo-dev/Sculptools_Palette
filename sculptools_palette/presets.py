@@ -53,7 +53,9 @@ def _coerce_colour(value, default):
 def sanitize_palette_dict(raw):
     """Coerce one raw palette entry into the _apply_palette_dict schema. Pad or
     truncate slots to MAX_SLOTS and subs to MAX_SLOTS x NUM_SUBSLOTS, filling
-    gaps with ''. Return None if the entry has no usable slots/subs at all."""
+    gaps with ''. Return None only when raw is not a dict, or its "slots"/
+    "subs" are missing or not lists — an entry with e.g. empty slots/subs
+    lists is still sanitized (into a blank palette), not dropped."""
     if not isinstance(raw, dict):
         return None
     slots_in = raw.get("slots")
@@ -73,7 +75,7 @@ def sanitize_palette_dict(raw):
                      for j in range(NUM_SUBSLOTS)])
 
     num = raw.get("num_slots", DEFAULT_NUM_SLOTS)
-    if not isinstance(num, int) or not (1 <= num <= MAX_SLOTS):
+    if not isinstance(num, int) or not (2 <= num <= MAX_SLOTS):
         num = DEFAULT_NUM_SLOTS
 
     return {
