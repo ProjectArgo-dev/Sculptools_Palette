@@ -4,8 +4,8 @@
 
 **A radial (pie) menu that puts your favourite sculpt brushes _and_ tools one keystroke away.**
 
-Stop hunting through the Asset Shelf. Press one key in Blender's **Sculpt Mode** and a
-wheel of your hand-picked brushes and tools opens right under the cursor. Flick, click,
+Stop hunting through the Asset Libraries. Press one key in Blender's **Sculpt Mode** and a
+palette of your hand-picked brushes and tools opens right under the cursor. Flick, click,
 or tap a number to switch — then get back to sculpting.
 
 **Find it useful?** Consider tipping at:
