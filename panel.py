@@ -87,17 +87,107 @@ def enable_preview_handler():
     """Register the draw handler once at addon register-time. The handler
     itself checks prefs.show_preview every frame and no-ops when off, so we
     don't need to add/remove it dynamically when the user toggles Preview."""
-    global _preview_handle
+    global _preview_handle, _preview_watch_stop
+    _preview_watch_stop = False         # re-arm after a previous unregister
     if _preview_handle is None:
         _preview_handle = bpy.types.SpaceView3D.draw_handler_add(
             _draw_preview_cb, (), 'WINDOW', 'POST_PIXEL')
+    # Cover a show_preview that persisted ON from the last session with the
+    # sidebar closed: the watch turns it off shortly after startup.
+    start_preview_sidebar_watch()
 
 
 def disable_preview_handler():
-    global _preview_handle
+    global _preview_handle, _preview_watch_stop
+    _preview_watch_stop = True          # stop the sidebar watch on unregister
     if _preview_handle is not None:
         bpy.types.SpaceView3D.draw_handler_remove(_preview_handle, 'WINDOW')
         _preview_handle = None
+
+
+# ── Preview Editor follows the sidebar ────────────────────────────────────────
+# The Preview Editor is a companion to the N-panel: closing/collapsing the
+# sidebar turns it OFF, and it stays off until the user presses the button again
+# (no auto-restore on re-open). Implemented as a light poll rather than from the
+# draw callback, because writing a property during draw is unreliable in Blender.
+_preview_watch_active = False
+_preview_watch_stop   = False
+
+
+# The sidebar can be shut in two ways, and they look COMPLETELY different in RNA
+# (both measured live on Blender 5.2, ui_scale 1):
+#   * N key / region_toggle -> show_region_ui becomes False.
+#   * dragged shut          -> show_region_ui STAYS True and the UI region
+#                              survives as the bare category-tab strip, 26px wide.
+# An open sidebar is an order of magnitude wider (280px by default), so a width
+# threshold between the two separates them. Expressed in UI-scaled pixels because
+# the tab strip grows with ui_scale. Do not lower this to 1px: that was the
+# original bug — 26 > 1, so a dragged-shut sidebar read as open.
+_SIDEBAR_MIN_OPEN_PX = 60
+
+
+def _sidebar_visible(context):
+    """True if ANY 3D viewport currently shows its sidebar genuinely open (not
+    hidden with N, not dragged shut to the tab strip). Checked across every
+    viewport, not just the active one: with two viewports open, the preview must
+    keep drawing as long as one of them still shows the panel."""
+    try:
+        windows = context.window_manager.windows
+    except Exception:
+        return False
+    try:
+        ui_scale = context.preferences.system.ui_scale or 1.0
+    except Exception:
+        ui_scale = 1.0
+    min_open = _SIDEBAR_MIN_OPEN_PX * ui_scale
+    for window in windows:
+        screen = getattr(window, "screen", None)
+        for area in (getattr(screen, "areas", None) or ()):
+            if area.type != 'VIEW_3D':
+                continue
+            space = getattr(getattr(area, "spaces", None), "active", None)
+            if not getattr(space, "show_region_ui", False):
+                continue        # sidebar hidden with N in this viewport
+            for region in (getattr(area, "regions", None) or ()):
+                if region.type == 'UI' and region.width > min_open:
+                    return True
+    return False
+
+
+def start_preview_sidebar_watch():
+    """Arm the poll that turns the Preview Editor off when the sidebar closes.
+    Idempotent (a second call while already watching is a no-op); the tick
+    disarms itself as soon as the preview is off or the sidebar is gone."""
+    global _preview_watch_active
+    if _preview_watch_active:
+        return
+    _preview_watch_active = True
+
+    def _tick():
+        global _preview_watch_active
+        if _preview_watch_stop:
+            _preview_watch_active = False
+            return None
+        try:
+            context = bpy.context
+            prefs = get_prefs(context)
+            if not prefs.show_preview:
+                _preview_watch_active = False
+                return None          # preview already off — nothing to watch
+            if not _sidebar_visible(context):
+                prefs.show_preview = False
+                _tag_redraw_view3d(context)
+                _preview_watch_active = False
+                return None
+        except Exception:
+            _preview_watch_active = False
+            return None
+        return 0.25
+
+    try:
+        bpy.app.timers.register(_tick, first_interval=0.25)
+    except Exception:
+        _preview_watch_active = False
 
 
 def _tag_redraw_view3d(context):
@@ -108,7 +198,7 @@ def _tag_redraw_view3d(context):
                 area.tag_redraw()
 
 
-# UNIVERSAL parameters (shared by all palettes) reset by "Reset All Palettes".
+# UNIVERSAL parameters (shared by all palettes) reset by "Delete All Palettes".
 # num_slots and the colours are NOT here: they are per-palette.
 _APPEARANCE_PROPS = [
     "palette_radius", "slot_radius",
@@ -136,7 +226,8 @@ class SCULPTOOLS_OT_reset_palette_appearance(Operator):
     bl_options  = {'INTERNAL'}
 
     def invoke(self, context, event):
-        return context.window_manager.invoke_confirm(self, event)
+        return context.window_manager.invoke_confirm(
+            self, event, title="Reset This Palette?")
 
     def execute(self, context):
         from .prefs import (set_slot, set_sub, MAX_SLOTS, NUM_SUBSLOTS,
@@ -163,14 +254,15 @@ class SCULPTOOLS_OT_reset_palette_appearance(Operator):
 
 class SCULPTOOLS_OT_reset_all_palettes(Operator):
     bl_idname   = "sculptools.reset_all_palettes"
-    bl_label    = "Reset All Palettes"
-    bl_description = ("Factory reset: reset the universal Appearance settings AND "
-                      "delete every palette, leaving a single empty default "
-                      "palette. This clears all brush/tool assignments")
+    bl_label    = "Delete All Palettes"
+    bl_description = ("Factory reset: delete every palette, leaving a single "
+                      "empty default palette. This clears all brush/tool "
+                      "assignments and resets the universal Appearance settings")
     bl_options  = {'INTERNAL'}
 
     def invoke(self, context, event):
-        return context.window_manager.invoke_confirm(self, event)
+        return context.window_manager.invoke_confirm(
+            self, event, title="Delete All Palettes?")
 
     def execute(self, context):
         from .prefs import factory_reset_palettes
@@ -275,6 +367,8 @@ class SCULPTOOLS_OT_toggle_preview(Operator):
         # sync_cycle_back_binding.)
         if prefs.show_preview:
             sync_cycle_back_binding(context)
+            # Watch the sidebar: closing/collapsing it turns the preview back off.
+            start_preview_sidebar_watch()
         _tag_redraw_view3d(context)
         return {'FINISHED'}
 
@@ -399,6 +493,11 @@ class SCULPTOOLS_PT_palette(Panel):
         # modal/preview and by _effective_layout. Do not remove the properties.
 
         col.separator()
+        # This panel drawing means the sidebar is open: (re)arm the watch so the
+        # preview is switched off as soon as the sidebar is closed/collapsed.
+        # Arming a timer from draw is safe — unlike writing a property.
+        if prefs.show_preview:
+            start_preview_sidebar_watch()
         row = col.row(align=True)
         row.scale_y = 1.3
         icon = 'HIDE_OFF' if prefs.show_preview else 'HIDE_ON'
@@ -409,7 +508,7 @@ class SCULPTOOLS_PT_palette(Panel):
                      text="Refresh Thumbnails", icon="FILE_REFRESH")
         col.separator()
         col.operator("sculptools.reset_all_palettes",
-                     text="Reset All Palettes", icon="TRASH")
+                     text="Delete All Palettes", icon="TRASH")
         col.separator()
         col.operator("sculptools.export_palettes", text="Export Palettes…",
                      icon="EXPORT")
