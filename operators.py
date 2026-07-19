@@ -773,7 +773,7 @@ class SCULPTOOLS_OT_jump_palette(Operator):
             request_prefs_save()
             _tag_view3d(context)
         self.report({'INFO'},
-                    f'Sculptools: Palette "{prefs.palettes[self.palette_index].name}"')
+                    f"Sculptools: Palette '{prefs.palettes[self.palette_index].name}'")
         return {'FINISHED'}
 
 
