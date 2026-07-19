@@ -41,7 +41,7 @@ def _op(key, display, target, params, category, fallback_label,
                      category, fallback_label, min_version)
 
 
-CATEGORY_ORDER = ("Add", "Mask", "Face Sets", "Trim", "Project", "Filter")
+CATEGORY_ORDER = ("Add", "Mask", "Hide", "Face Sets", "Trim", "Project", "Filter")
 
 TOOLS = [
     # ── Add — primitive tools (Blender 5.2+, gated via min_version) ──
@@ -60,6 +60,11 @@ TOOLS = [
     _op("mask_clear",  "Clear Mask",  "paint.mask_flood_fill", {"mode": 'VALUE', "value": 0.0}, "Mask", "Clr Mask"),
     _op("mask_invert", "Invert Mask", "paint.mask_flood_fill", {"mode": 'INVERT'},              "Mask", "Inv Mask"),
     _op("mask_fill",   "Fill Mask",   "paint.mask_flood_fill", {"mode": 'VALUE', "value": 1.0}, "Mask", "Fill Mask"),
+    # ── Hide — interactive gesture tools (hide/reveal geometry) ──
+    _tool("box_hide",      "Box Hide",      "builtin.box_hide",      "Hide", "Box Hide"),
+    _tool("lasso_hide",    "Lasso Hide",    "builtin.lasso_hide",    "Hide", "Lasso Hide"),
+    _tool("line_hide",     "Line Hide",     "builtin.line_hide",     "Hide", "Line Hide"),
+    _tool("polyline_hide", "Polyline Hide", "builtin.polyline_hide", "Hide", "Poly Hide"),
     # ── Face Sets — interactive ──
     _tool("box_face_set",   "Box Face Set",   "builtin.box_face_set",   "Face Sets", "Box FSet"),
     _tool("lasso_face_set", "Lasso Face Set", "builtin.lasso_face_set", "Face Sets", "Lasso FSet"),

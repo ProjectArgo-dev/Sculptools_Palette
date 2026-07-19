@@ -32,6 +32,13 @@ QUICK_FLICK_DIST_FACTOR = 0.5  # fraction of palette radius the cursor must
 # ── module-level state shared with operators ──────────────────────────────────
 _slot_clipboard      = {'brush': ''}      # copy/paste between slots
 _slot_context_target = {'slot': -1, 'sub': -1}  # set before opening context menu
+# True while a wheel modal is running (set in invoke/_finish). Lets the slot
+# context-menu assign operators tell whether there is an open wheel to close.
+_wheel_active        = {'on': False}
+# Set True by the assign operators (Add Active Brush / Assign Tool) after they
+# write a slot WHILE the wheel is open. The modal polls it at the top of modal()
+# and finishes, so assigning from the slot context menu auto-closes the wheel.
+_close_after_assign  = {'pending': False}
 
 
 # ── brush activation ──────────────────────────────────────────────────────────
@@ -280,6 +287,11 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             self._draw_cb, (context,), 'WINDOW', 'POST_PIXEL')
         self._timer = context.window_manager.event_timer_add(
             0.016, window=context.window)
+
+        # Mark a wheel as open and clear any leftover close request, so a stale
+        # flag can never auto-close a freshly opened wheel.
+        _wheel_active['on'] = True
+        _close_after_assign['pending'] = False
 
         context.window_manager.modal_handler_add(self)
         context.area.tag_redraw()
@@ -544,6 +556,15 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             self._finish(context)
             return {'CANCELLED'}
 
+        # Assigning a brush/tool from the slot context menu requests an auto-close:
+        # the assign operator ran while the menu was up; now that the modal has
+        # resumed (menu dismissed on the click), finish the wheel. Checked before
+        # any per-event branch so it fires on the very next event (TIMER/MOUSEMOVE).
+        if _close_after_assign['pending']:
+            _close_after_assign['pending'] = False
+            self._finish(context)
+            return {'FINISHED'}
+
         context.area.tag_redraw()
 
         # ── middle mouse button: close the palette AND start viewport nav ─────
@@ -794,6 +815,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         if getattr(self, "_finished", False):
             return
         self._finished = True
+        _wheel_active['on'] = False   # no open wheel for the assign ops to close
         # Clear the right-drag readout overlay in case the wheel closed mid-drag.
         try:
             self._rmb_end_overlay()

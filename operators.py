@@ -21,6 +21,15 @@ def _resolve_target(op_slot, op_sub):
     return slot, sub
 
 
+def _request_wheel_close():
+    """Ask the open wheel modal to auto-close (used after an assign from the slot
+    context menu). No-op if no wheel is open, so the same operators invoked from
+    anywhere else never leave a stale close flag behind."""
+    from .modal import _wheel_active, _close_after_assign
+    if _wheel_active.get('on'):
+        _close_after_assign['pending'] = True
+
+
 # Exact (slot, sub) the "Assign Tool" submenu writes to. Set at draw time by
 # _draw_slot_actions, because Blender submenus (layout.menu) cannot carry
 # per-target operator args the way the flat action operators do.
@@ -415,6 +424,7 @@ class SCULPTOOLS_OT_slot_add_active(Operator):
         else:
             set_slot(context, slot, brush.name)
             self.report({'INFO'}, f"Sculptools: '{brush.name}' → Slot {slot+1}")
+        _request_wheel_close()   # assigning from the context menu closes the wheel
         return {'FINISHED'}
 
 
@@ -552,6 +562,7 @@ class SCULPTOOLS_OT_assign_tool_to_slot(Operator):
         if not is_oneshot(spec):
             from .modal import _activate_slot
             _activate_slot(spec)
+        _request_wheel_close()   # assigning from the context menu closes the wheel
         return {'FINISHED'}
 
 
@@ -761,7 +772,8 @@ class SCULPTOOLS_OT_jump_palette(Operator):
             prefs.active_palette_index = self.palette_index
             request_prefs_save()
             _tag_view3d(context)
-        self.report({'INFO'}, f"Sculptools: palette {self.palette_index + 1}")
+        self.report({'INFO'},
+                    f'Sculptools: Palette "{prefs.palettes[self.palette_index].name}"')
         return {'FINISHED'}
 
 
