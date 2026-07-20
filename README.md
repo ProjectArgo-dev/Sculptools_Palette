@@ -16,13 +16,12 @@ or tap a number to switch — then get back to sculpting.
 
 ## Features
 
-- **Radial Palette menu** — instant access to your brushes and tools.
+- **Radial Palette menu** — instant access to your brushes and tools in the same wheel.
 - **Dynamic Brush Sliders** — right-click + drag to tune brush Radius and Strength.
-- **Brushes _and_ Sculpt tools in the same wheel** — Mask, Face Sets, Trim, Line Project,
-  Mesh / Cloth / Color Filter and more.
 - **Up to 8 palettes**, each with 10 main slots × 3 sub-slots — group related brushes
   together (e.g. Draw → Clay Strips, Crease Sharp, Blob) and switch whole sets instantly.
 - **Quick Numbers** — press a number key to activate a slot without opening the wheel.
+- **Jump-to** — Cltrl + number key to jump immediately to the Palette you need.
 - **Import / Export presets** — backup your palettes and their look to a shareable file.
 - **Real thumbnails** — directly loaded from your own Asset libraries.
 - **Fully configurable** — dedicated **N** panel visible in Sculpt Mode.
