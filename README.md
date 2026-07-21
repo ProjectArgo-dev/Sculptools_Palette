@@ -32,10 +32,15 @@ or tap a number to switch — then get back to sculpting.
 
 ## Installation
 
-**Drag&drop it from the Blender Extensions Platform**
-or
-Install it directly from Blender: **Edit ▸ Preferences ▸ Get Extensions**,
-search for *Sculptools: Palette*, and click **Install**.
+**Drag & drop from the Blender Extensions Platform**
+
+Drag the extension from [extensions.blender.org](https://extensions.blender.org)
+straight onto a Blender window.
+
+**or install from inside Blender**
+
+Go to **Edit ▸ Preferences ▸ Get Extensions**, search for *Sculptools: Palette*,
+and click **Install**.
 
 ## Quick start
 
