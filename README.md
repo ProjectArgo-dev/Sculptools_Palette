@@ -4,7 +4,7 @@
 
 **A radial (pie) menu that puts your favourite sculpt brushes _and_ tools one keystroke away.**
 
-Stop hunting through the Asset Libraries. Press one key in Blender's **Sculpt Mode** and a
+No more hunting through the Asset Libraries. Press one key in Blender's **Sculpt Mode** and a
 palette of your hand-picked brushes and tools opens right under the cursor. Flick, click,
 or tap a number to switch — then get back to sculpting.
 
@@ -18,11 +18,11 @@ or tap a number to switch — then get back to sculpting.
 
 - **Radial Palette menu** — instant access to your brushes and tools in the same wheel.
 - **Dynamic Brush Sliders** — right-click + drag to tune brush Radius and Strength.
-- **Up to 8 palettes**, each with 10 main slots × 3 sub-slots — group related brushes
-  together (e.g. Draw → Clay Strips, Crease Sharp, Blob) and switch whole sets instantly.
+- **Up to 8 palettes**, each with 10 main slots × 3 sub-slots — switch whole sets instantly.
 - **Quick Numbers** — press a number key to activate a slot without opening the wheel.
-- **Jump-to** — Ctrl + number key to jump immediately to the Palette you need.
+- **Jump-to** — Ctrl + number key to jump immediately to the palette you need.
 - **Import / Export presets** — backup your palettes and their look to a shareable file.
+- **Seamless integration** — add brushes and tools from the shelf or using the radial menu.
 - **Real thumbnails** — directly loaded from your own Asset libraries.
 - **Fully configurable** — dedicated **N** panel visible in Sculpt Mode.
 
@@ -32,15 +32,10 @@ or tap a number to switch — then get back to sculpting.
 
 ## Installation
 
-**From the Blender Extensions Platform (recommended)**
+**Drag&drop it from the Blender Extensions Platform**
+or
 Install it directly from Blender: **Edit ▸ Preferences ▸ Get Extensions**,
 search for *Sculptools: Palette*, and click **Install**.
-
-**Manual install from a `.zip`**
-1. Download the latest `sculptools_palette-x.y.z.zip` (from the
-   [Releases](../../releases) page).
-2. In Blender: **Edit ▸ Preferences ▸ Add-ons ▸ Install from Disk…** and pick the zip.
-3. Enable **Sculptools: Palette**.
 
 ## Quick start
 
