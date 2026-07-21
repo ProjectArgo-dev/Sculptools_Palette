@@ -827,14 +827,14 @@ def request_preview_by_name(brush_name: str) -> bool:
 
 
 def warm_palette_previews(names):
-    """Pre-richiedi le preview per un iterabile di nomi brush, OFF-DRAW, così
-    aprire la ruota / switchare su una palette 'fredda' mostra le thumbnail già
-    pronte, senza pop-in di più frame. Usa il path by-name della coda
-    (_request_external_preview), che risolve l'artwork Essentials/custom SENZA
-    bisogno di un datablock vivo — funziona anche subito dopo il caricamento di
-    un file, prima che i brush assegnati siano istanziati in bpy.data.brushes.
-    Idempotente: _request_external_preview deduplica via _preview_requested.
-    Non tocca la library Essentials oltre il preload esistente (regola d'oro #3)."""
+    """Pre-request the previews for an iterable of brush names, OFF-DRAW, so that
+    opening the wheel / switching to a 'cold' palette shows the thumbnails already
+    prepared, with no multi-frame pop-in. Uses the queue's by-name path
+    (_request_external_preview), which resolves Essentials/custom artwork WITHOUT
+    needing a live datablock — it works even right after a file load, before the
+    assigned brushes are instantiated in bpy.data.brushes. Idempotent:
+    _request_external_preview deduplicates through _preview_requested. Does not
+    touch the Essentials library beyond the existing preload (golden rule #3)."""
     for name in names:
         if name:
             _request_external_preview(name)

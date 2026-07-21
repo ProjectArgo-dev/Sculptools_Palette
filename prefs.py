@@ -881,11 +881,11 @@ def set_sub(context, i, j, name):
 
 
 def collect_assigned_brush_names(palettes):
-    """Pure: dato un iterabile di oggetti palette-like (ognuno con attributi
-    .num_slots, .slot_i, .sub_i_j), ritorna i nomi BRUSH assegnati su TUTTE le
-    palette, deduplicati in ordine first-seen. Tool spec (tool:<key>) e stringhe
-    vuote sono esclusi — solo brush reali, gli unici la cui preview va scaldata.
-    Testabile senza bpy."""
+    """Pure: given an iterable of palette-like objects (each with .num_slots,
+    .slot_i and .sub_i_j attributes), return the BRUSH names assigned across ALL
+    palettes, deduplicated in first-seen order. Tool specs (tool:<key>) and empty
+    strings are excluded — only real brushes, the only ones whose preview needs
+    warming. Testable without bpy."""
     from .tools import is_tool_spec
     seen = {}
     for pit in palettes:
@@ -900,8 +900,8 @@ def collect_assigned_brush_names(palettes):
 
 
 def iter_all_assigned_brush_names(context):
-    """Tutti i nomi brush assegnati su ogni palette (glue su
-    collect_assigned_brush_names). ensure_palettes garantisce >=1 palette e
-    clampa l'indice attivo. Ritorna una lista deduplicata."""
+    """Every brush name assigned across all palettes (glue over
+    collect_assigned_brush_names). ensure_palettes guarantees >=1 palette and
+    clamps the active index. Returns a deduplicated list."""
     prefs = ensure_palettes(context)
     return collect_assigned_brush_names(prefs.palettes)

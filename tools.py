@@ -162,9 +162,9 @@ def best_tool_label(spec):
 
 
 def tool_available(entry, blender_version):
-    """True se questo tool esiste sulla data versione Blender. Entry con
-    min_version=None sono sempre disponibili; altrimenti serve
-    tuple(blender_version) >= entry.min_version. Puro (no bpy) — il chiamante
-    (operators.py) passa bpy.app.version."""
+    """True if this tool exists on the given Blender version. Entries with
+    min_version=None are always available; otherwise it requires
+    tuple(blender_version) >= entry.min_version. Pure (no bpy) — the caller
+    (operators.py) passes bpy.app.version."""
     mv = entry.min_version
     return mv is None or tuple(blender_version) >= tuple(mv)
