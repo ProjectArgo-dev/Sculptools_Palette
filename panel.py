@@ -209,6 +209,23 @@ _APPEARANCE_PROPS = [
     "fixed_slot_outline",
 ]
 
+# UNIVERSAL interaction settings. Also global, also carried by preset files — but
+# deliberately NOT in _APPEARANCE_PROPS, because that list is what "Delete All
+# Palettes" unsets: a factory reset restores the LOOK, it must not silently
+# rebind the jump modifier or switch the Quick Numbers / Dynamic Sliders toggles.
+_INTERACTION_PROPS = [
+    "hover_delay", "fade_out_duration",
+    "dynamic_sliders_enabled", "quick_numbers_enabled",
+    "jump_modifier",
+]
+
+# Everything a preset file carries in its "appearance" block, so that an export
+# is a complete backup of the universal settings. Additive by design: an older
+# add-on reading a newer file ignores keys it does not know, and a newer add-on
+# reading an older file just leaves the missing ones at their current value —
+# which is why this did NOT need a presets.SCHEMA_VERSION bump.
+_EXPORTED_PREFS = _APPEARANCE_PROPS + _INTERACTION_PROPS
+
 # PER-PALETTE parameters (custom for each palette): slot count + the 2 colours.
 # They live on the active PaletteItem. "Reset This Palette" restores num_slots to
 # the default and the colours like this: the FIRST palette (index 0, the default

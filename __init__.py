@@ -187,8 +187,11 @@ def register():
     # migration happens in a normal (writable) context on a fresh session.
     def _ensure_palettes_startup():
         try:
-            from .prefs import ensure_palettes
+            from .prefs import ensure_palettes, migrate_settings
             ensure_palettes(bpy.context)
+            # Same writable, off-draw context: bring the settings layout up to
+            # date and stamp it (see prefs.SETTINGS_SCHEMA).
+            migrate_settings(bpy.context)
         except Exception as exc:
             print(f"Sculptools: deferred palette init skipped: {exc}")
         return None

@@ -12,6 +12,35 @@ NUM_SUBSLOTS = 3
 MAX_PALETTES = 8   # palette ceiling (memory/perf are not the constraint — only the
                    # UX of cycle/jump; v2.7.0 raised 4->8 at the user's request)
 
+# ── Settings schema ───────────────────────────────────────────────────────────
+# Version stamp written onto the preferences (`settings_schema`). Preferences
+# saved before this existed read back as 0, because the property is simply absent
+# from userpref.blend — that IS the "pre-stamp" bucket (any release up to and
+# including the first 1.0.0 zips).
+#
+# There is nothing to convert to reach 1: the property layout is unchanged and
+# this is only the anchor point. Its value is for LATER — if a future version
+# renames or restructures a persisted property, it registers a step in
+# _SETTINGS_MIGRATIONS and bumps SETTINGS_SCHEMA, and existing users are upgraded
+# in place instead of silently reverting to defaults (which is what the
+# rim->outline rename did, by necessity: there was no hook to migrate them).
+SETTINGS_SCHEMA = 1
+
+# {version_to_migrate_FROM: callable(prefs) -> None}. A step runs when the stored
+# stamp is <= its key and the key is < SETTINGS_SCHEMA; steps run in ascending
+# order. Empty by design at schema 1.
+_SETTINGS_MIGRATIONS = {}
+
+# Jump-to-Palette modifier choices. Single source of truth: the EnumProperty items
+# and the identifier tuple that preset import validates against (an identifier not
+# in this tuple would raise on setattr) are derived from the same list.
+JUMP_MODIFIER_ITEMS = [
+    ('CTRL',  "Ctrl",  "Ctrl + number (1-8) jumps to that palette"),
+    ('ALT',   "Alt",   "Alt + number (1-8) jumps to that palette"),
+    ('SHIFT', "Shift", "Shift + number (1-8) jumps to that palette"),
+]
+JUMP_MODIFIER_VALUES = tuple(i[0] for i in JUMP_MODIFIER_ITEMS)
+
 # DEFAULT colours of a NEW palette (the migrated one uses the current globals).
 NEW_SLOT_COLOUR = (1.0, 1.0, 1.0)                       # #FFFFFF
 NEW_SUB_COLOUR  = (0.7372549, 0.7372549, 0.7372549)     # #BCBCBC
@@ -311,6 +340,10 @@ class SculptoolsPreferences(AddonPreferences):
     palettes: CollectionProperty(type=PaletteItem) # type: ignore
     active_palette_index: IntProperty(default=0) # type: ignore
 
+    # Layout stamp — see SETTINGS_SCHEMA. Never shown in the UI; it exists so a
+    # future version can tell which layout wrote these prefs.
+    settings_schema: IntProperty(default=0, options={'HIDDEN'}) # type: ignore
+
     # "Cycle palette" hotkey: a "holder" keymap item (sculptools.cycle_palette_holder,
     # created in __init__.register, ACTIVE since v2.7.1) edited by the native keymap
     # widget. Outside the preview the operator does PASS_THROUGH; with the Preview
@@ -468,11 +501,7 @@ class SculptoolsPreferences(AddonPreferences):
         description="Modifier held with a number key (1-8) to jump straight to "
                     "that palette in Sculpt Mode. A modifier is required so the "
                     "shortcut never clashes with Quick Numbers (plain number keys)",
-        items=[
-            ('CTRL',  "Ctrl",  "Ctrl + number (1-8) jumps to that palette"),
-            ('ALT',   "Alt",   "Alt + number (1-8) jumps to that palette"),
-            ('SHIFT', "Shift", "Shift + number (1-8) jumps to that palette"),
-        ],
+        items=JUMP_MODIFIER_ITEMS,
         default='CTRL',
         update=_jump_modifier_update) # type: ignore
 
@@ -609,6 +638,44 @@ def ensure_palettes(context):
         prefs.active_palette_index = 0
         request_prefs_save()
     prefs.active_palette_index = clamp_index(prefs.active_palette_index, len(prefs.palettes))
+    return prefs
+
+
+def settings_migration_steps(stored, current, available):
+    """Which migration steps to run, in order, to bring a `stored` schema stamp up
+    to `current`. `available` is the set of registered step keys. A step keyed V
+    runs when stored <= V < current. Returns [] when already current or newer
+    (prefs written by a NEWER add-on are left untouched — downgrading must not
+    rewrite them). Pure: no bpy, unit-tested."""
+    try:
+        stored = int(stored)
+        current = int(current)
+    except (TypeError, ValueError):
+        return []
+    if stored >= current:
+        return []
+    return sorted(v for v in available if stored <= v < current)
+
+
+def migrate_settings(context):
+    """Bring the stored preferences up to SETTINGS_SCHEMA and stamp them.
+
+    Must run OFF the draw path (it writes properties) — it is called from the
+    deferred startup timer in __init__.register, next to ensure_palettes. A step
+    that raises is reported and skipped: a broken migration must never stop the
+    add-on from loading, and leaving the stamp unwritten would only retry it on
+    every launch."""
+    prefs = get_prefs(context)
+    stored = int(getattr(prefs, "settings_schema", 0))
+    if stored >= SETTINGS_SCHEMA:
+        return prefs
+    for v in settings_migration_steps(stored, SETTINGS_SCHEMA, _SETTINGS_MIGRATIONS):
+        try:
+            _SETTINGS_MIGRATIONS[v](prefs)
+        except Exception as exc:
+            print(f"Sculptools: settings migration {v} skipped: {exc}")
+    prefs.settings_schema = SETTINGS_SCHEMA
+    request_prefs_save()
     return prefs
 
 

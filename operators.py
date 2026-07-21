@@ -858,12 +858,19 @@ def _addon_version_string():
 
 
 def _read_appearance(prefs):
-    from .panel import _APPEARANCE_PROPS
+    """Read every universal setting a preset carries (appearance + interaction).
+    Enum values stay strings; everything else is a bool or a float."""
+    from .panel import _EXPORTED_PREFS
     out = {}
-    for k in _APPEARANCE_PROPS:
+    for k in _EXPORTED_PREFS:
         try:
             v = getattr(prefs, k)
-            out[k] = bool(v) if isinstance(v, bool) else float(v)
+            if isinstance(v, bool):
+                out[k] = bool(v)
+            elif isinstance(v, str):
+                out[k] = v
+            else:
+                out[k] = float(v)
         except Exception:
             pass
     return out
@@ -896,7 +903,8 @@ def _available_brush_names(context):
 class SCULPTOOLS_OT_export_palettes(Operator, ExportHelper):
     bl_idname   = "sculptools.export_palettes"
     bl_label    = "Export Palettes"
-    bl_description = "Save all palettes and appearance settings to a .json preset file"
+    bl_description = ("Save all palettes and every universal setting (appearance "
+                      "and interaction) to a .json preset file")
     bl_options  = {'INTERNAL'}
     filename_ext = ".json"
     filter_glob: StringProperty(default="*.json", options={'HIDDEN'}) # type: ignore
@@ -940,8 +948,9 @@ class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
 
     def execute(self, context):
         from .prefs import (ensure_palettes, get_prefs, _apply_palette_dict,
-                            request_prefs_save, MAX_PALETTES)
-        from .panel import _APPEARANCE_PROPS, _tag_redraw_view3d
+                            request_prefs_save, MAX_PALETTES,
+                            JUMP_MODIFIER_VALUES)
+        from .panel import _EXPORTED_PREFS, _tag_redraw_view3d
         from . import presets, gpu_draw
 
         # 1. read + parse (non-destructive)
@@ -960,7 +969,8 @@ class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
 
         # 3. build the full plan in memory (still non-destructive)
         sanitized, appearance, skipped, clamped = presets.build_import_plan(
-            data, MAX_PALETTES, _APPEARANCE_PROPS)
+            data, MAX_PALETTES, _EXPORTED_PREFS,
+            {"jump_modifier": JUMP_MODIFIER_VALUES})
         if not sanitized:
             self.report({'ERROR'}, "No usable palettes to import")
             return {'CANCELLED'}

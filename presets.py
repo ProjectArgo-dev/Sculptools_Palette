@@ -88,15 +88,27 @@ def sanitize_palette_dict(raw):
     }
 
 
-def sanitize_appearance(raw, known_keys):
-    """Keep only recognised appearance keys with float/bool values; drop the
-    rest. The operator setattrs the result onto prefs (Blender clamps ranges)."""
+def sanitize_appearance(raw, known_keys, enum_choices=None):
+    """Keep only recognised keys with numeric/bool values; drop the rest. The
+    operator setattrs the result onto prefs (Blender clamps ranges).
+
+    `enum_choices` maps a key to the tuple of identifiers its EnumProperty
+    accepts. Those keys take a STRING instead, and only when it is one of the
+    listed identifiers — setattr with an unknown enum id raises, so an edited or
+    corrupted file must not reach prefs."""
     out = {}
     if not isinstance(raw, dict):
         return out
+    enum_choices = enum_choices or {}
     for k in known_keys:
-        if k in raw and isinstance(raw[k], (int, float, bool)):
-            out[k] = raw[k]
+        if k not in raw:
+            continue
+        v = raw[k]
+        if k in enum_choices:
+            if isinstance(v, str) and v in enum_choices[k]:
+                out[k] = v
+        elif isinstance(v, (int, float, bool)):
+            out[k] = v
     return out
 
 
@@ -128,7 +140,8 @@ def count_available_entries(palette_dicts, available_brush_names, blender_versio
     return found, total
 
 
-def build_import_plan(data, max_palettes, known_appearance_keys):
+def build_import_plan(data, max_palettes, known_appearance_keys,
+                      enum_choices=None):
     """From a preset dict (validate_preset assumed already passed), produce the
     ready-to-apply import plan: (sanitized_palettes, appearance, skipped, clamped).
 
@@ -151,5 +164,6 @@ def build_import_plan(data, max_palettes, known_appearance_keys):
     if len(sanitized) > max_palettes:
         clamped = len(sanitized) - max_palettes
         sanitized = sanitized[:max_palettes]
-    appearance = sanitize_appearance(data.get("appearance", {}), known_appearance_keys)
+    appearance = sanitize_appearance(data.get("appearance", {}),
+                                     known_appearance_keys, enum_choices)
     return sanitized, appearance, skipped, clamped
