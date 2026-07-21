@@ -129,11 +129,24 @@ class SCULPTOOLS_OT_assign_to_slot(Operator):
         return {'FINISHED'}
 
 
+# NOTE on bl_options for every operator below that WRITES a slot/sub (or the
+# clipboard): they are deliberately NOT 'REGISTER'. With REGISTER, Blender keeps
+# the operator as the "last operator" together with its property values, so F9,
+# Ctrl+Shift+Z (redo) and Repeat Last re-run execute() with STALE indices — a
+# silent, unasked-for palette mutation. That is exactly the ghost-rename bug
+# fixed on rename/delete; those two had to keep REGISTER (an invoke_props_dialog
+# raised straight from a menu item does not appear without it) and were made
+# re-run-proof by construction instead. The operators here are execute-only with
+# no dialog, so simply dropping REGISTER is the cleaner fix: nothing can replay
+# them. UNDO is kept where it was. The picker-opening operators (assign_to_slot,
+# shelf_add, toolbar_add) still have REGISTER: replaying them only re-opens a
+# popup, they write nothing, and they touch the fragile dialog path.
+
 class SCULPTOOLS_OT_confirm_assign(Operator):
     bl_idname = "sculptools.confirm_assign"
     bl_label  = "Confirm Assignment"
     bl_description = "Assign to this slot / sub-slot"
-    bl_options = {'REGISTER'}
+    bl_options = {'INTERNAL'}
 
     slot_index: IntProperty(default=0)  # type: ignore
     sub_index:  IntProperty(default=-1) # type: ignore
@@ -153,7 +166,7 @@ class SCULPTOOLS_OT_confirm_assign(Operator):
 class SCULPTOOLS_OT_clear_slot(Operator):
     bl_idname  = "sculptools.clear_slot"
     bl_label   = "Clear Slot"
-    bl_options = {'REGISTER'}
+    bl_options = {'INTERNAL'}
 
     slot_index: IntProperty(default=0)  # type: ignore
     sub_index:  IntProperty(default=-1) # type: ignore
@@ -401,7 +414,7 @@ class SCULPTOOLS_OT_slot_add_active(Operator):
     bl_idname   = "sculptools.slot_add_active"
     bl_label    = "Add Active Brush to Slot"
     bl_description = "Assign the currently active brush to this palette slot"
-    bl_options  = {'REGISTER', 'UNDO'}
+    bl_options  = {'INTERNAL', 'UNDO'}
 
     # -1 → resolve from _slot_context_target
     slot_index: IntProperty(default=-1)  # type: ignore
@@ -434,7 +447,7 @@ class SCULPTOOLS_OT_slot_cut(Operator):
     bl_idname   = "sculptools.slot_cut"
     bl_label    = "Cut from Slot"
     bl_description = "Copy this slot's content to the Sculptools clipboard and clear the slot"
-    bl_options  = {'REGISTER', 'UNDO'}
+    bl_options  = {'INTERNAL', 'UNDO'}
 
     slot_index: IntProperty(default=-1) # type: ignore
     sub_index:  IntProperty(default=-2) # type: ignore
@@ -462,7 +475,7 @@ class SCULPTOOLS_OT_slot_copy(Operator):
     bl_idname   = "sculptools.slot_copy"
     bl_label    = "Copy from Slot"
     bl_description = "Copy this slot's content to the Sculptools clipboard"
-    bl_options  = {'REGISTER'}
+    bl_options  = {'INTERNAL'}
 
     slot_index: IntProperty(default=-1) # type: ignore
     sub_index:  IntProperty(default=-2) # type: ignore
@@ -486,7 +499,7 @@ class SCULPTOOLS_OT_slot_paste(Operator):
     bl_idname   = "sculptools.slot_paste"
     bl_label    = "Paste Brush to Slot"
     bl_description = "Paste the brush from the Sculptools clipboard into this slot"
-    bl_options  = {'REGISTER', 'UNDO'}
+    bl_options  = {'INTERNAL', 'UNDO'}
 
     slot_index: IntProperty(default=-1) # type: ignore
     sub_index:  IntProperty(default=-2) # type: ignore
@@ -516,7 +529,7 @@ class SCULPTOOLS_OT_slot_remove(Operator):
     bl_idname   = "sculptools.slot_remove"
     bl_label    = "Remove Brush from Slot"
     bl_description = "Clear the brush assignment from this palette slot"
-    bl_options  = {'REGISTER', 'UNDO'}
+    bl_options  = {'INTERNAL', 'UNDO'}
 
     slot_index: IntProperty(default=-1) # type: ignore
     sub_index:  IntProperty(default=-2) # type: ignore
@@ -537,7 +550,7 @@ class SCULPTOOLS_OT_assign_tool_to_slot(Operator):
     bl_idname   = "sculptools.assign_tool_to_slot"
     bl_label    = "Assign Tool to Slot"
     bl_description = "Assign this Sculpt tool/action to the palette slot"
-    bl_options  = {'REGISTER', 'UNDO'}
+    bl_options  = {'INTERNAL', 'UNDO'}
 
     tool_key: StringProperty()  # type: ignore
 
