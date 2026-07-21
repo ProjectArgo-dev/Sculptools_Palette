@@ -28,7 +28,7 @@ or tap a number to switch — then get back to sculpting.
 
 ## Requirements
 
-- **Blender 4.2 or newer** (installed as an Extension).
+- **Blender 4.5 or newer** (installed as an Extension).
 
 ## Installation
 

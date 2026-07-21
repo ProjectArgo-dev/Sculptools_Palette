@@ -14,8 +14,9 @@ type = "add-on"
 # (case-sensitive); the validator rejects unknown ones.
 tags = ["Sculpt", "User Interface"]
 
-# Extensions require Blender >= 4.2 (they did not exist before).
-blender_version_min = "4.2.0"
+# Extensions require Blender >= 4.2 (they did not exist before), but this add-on
+# declares 4.5 as its supported floor.
+blender_version_min = "4.5.0"
 
 license = ["SPDX:GPL-3.0-or-later"]
 

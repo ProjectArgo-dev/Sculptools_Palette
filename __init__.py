@@ -1,6 +1,6 @@
 # sculptools_palette/__init__.py
 
-# NB: no `bl_info`. Since v2.7.0 the add-on ships as an EXTENSION (Blender 4.2+):
+# NB: no `bl_info`. Since v2.7.0 the add-on ships as an EXTENSION (Blender 4.5+):
 # all metadata (name, version, min Blender, license, tags) lives in
 # `blender_manifest.toml`, which Blender reads instead of bl_info.
 
