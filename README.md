@@ -1,4 +1,4 @@
-![Sculptools: Palette](images/palette_banner_kofi.jpg)
+![Sculptools: Palette](images/palette_banner.jpg)
 
 # Sculptools: Palette
 
