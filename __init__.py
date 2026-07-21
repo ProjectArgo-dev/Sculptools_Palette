@@ -29,24 +29,25 @@ _all_classes = (
 
 _addon_keymaps = []
 
-# Mode-gated palette warm-up: pre-carica le preview di TUTTE le palette (non solo
-# l'attiva) così switch/jump/cycle non hanno pop-in. DEVE girare in Sculpt mode:
-# il preload Essentials linka una library che sgancia transitoriamente il brush di
-# sculpt attivo, e il restore riesce SOLO in Sculpt mode (in Blender 5.x
-# `tool_settings.sculpt.brush` è READ-ONLY → si riattiva solo via operatore, che
-# richiede sculpt mode). Fuori da Sculpt mode la ruota non può nemmeno aprirsi,
-# quindi scaldare lì è insieme inutile e pericoloso (azzererebbe il brush).
-# `_warmup_poll_active` evita timer accatastati; `_warmup_stop` lo ferma su
-# unregister.
+# Mode-gated palette warm-up: preloads the previews of ALL palettes (not just the
+# active one) so switching/jumping/cycling has no pop-in. It MUST run in Sculpt
+# mode: the Essentials preload links a library, which transiently unsets the
+# active sculpt brush, and restoring it only succeeds in Sculpt mode (on Blender
+# 5.x `tool_settings.sculpt.brush` is READ-ONLY, so it can only be re-activated
+# through an operator, which requires sculpt mode). Outside Sculpt mode the wheel
+# cannot even open, so warming up there is both pointless and dangerous (it would
+# clear the brush). `_warmup_poll_active` prevents stacked timers; `_warmup_stop`
+# stops it on unregister.
 _warmup_poll_active = False
 _warmup_stop        = False
 
 
 def _schedule_palette_warmup():
-    """Arma un timer leggero che, appena il contesto è in Sculpt mode, scalda una
-    volta le preview di tutte le palette e poi si spegne. Finché non sei in sculpt
-    (o mai) fa solo un check ~1s, no-op. Idempotente lato coda
-    (warm_palette_previews deduplica via _preview_requested)."""
+    """Arm a light timer that, as soon as the context is in Sculpt mode, warms up
+    every palette's previews once and then disarms itself. Until sculpt mode is
+    entered (or forever, if it never is) it only costs a ~1s no-op check.
+    Idempotent on the queue side (warm_palette_previews deduplicates through
+    _preview_requested)."""
     global _warmup_poll_active
     if _warmup_poll_active:
         return
@@ -59,14 +60,14 @@ def _schedule_palette_warmup():
             return None
         try:
             if bpy.context.mode != 'SCULPT':
-                return 1.0  # non ancora in sculpt — ricontrolla tra 1s
+                return 1.0  # not in sculpt yet — re-check in 1s
             from .prefs import iter_all_assigned_brush_names
             from .gpu_draw import warm_palette_previews
             warm_palette_previews(iter_all_assigned_brush_names(bpy.context))
         except Exception as exc:
             print(f"Sculptools: palette preview warm-up skipped: {exc}")
         _warmup_poll_active = False
-        return None  # fatto (o errore) — disarma il timer
+        return None  # done (or errored) — disarm the timer
 
     try:
         bpy.app.timers.register(_tick, first_interval=1.0)
@@ -76,20 +77,18 @@ def _schedule_palette_warmup():
 
 @persistent
 def _sculptools_load_post(_dummy):
-    """On file load, validate the palette (deferred so the asset system has
-    settled and custom-library scans can run off-load): drop assignments whose
-    brush can no longer be resolved, e.g. because the user removed the custom
-    library it came from. See maintenance.prune_orphaned_brushes for the safety
-    rules (it no-ops if any configured library is offline)."""
+    """On file load, warm the palette thumbnails.
+
+    It does NOT prune unresolvable assignments any more (2026-07-21, with the
+    whole maintenance.py module removed): a library folder that merely moved is
+    indistinguishable from one that is gone, so the automatic prune silently
+    emptied palettes in that case. An unresolvable slot now renders as
+    "not found" while KEEPING its stored name, so it stays visible, heals itself
+    when the library comes back, and the user can reassign it by hand."""
     def _run():
-        try:
-            from .maintenance import prune_orphaned_brushes
-            prune_orphaned_brushes(bpy.context)
-        except Exception as exc:
-            print(f"Sculptools: palette validation error: {exc}")
-        # Arma il warm-up di TUTTE le palette, ma differito all'ingresso in Sculpt
-        # mode (vedi _schedule_palette_warmup): lì il preload è sicuro per il brush
-        # attivo ed è il primo momento in cui le palette servono davvero.
+        # Warm up ALL palettes, deferred until Sculpt mode is entered (see
+        # _schedule_palette_warmup): there the preload is safe for the active
+        # brush, and it is the first moment the palettes are actually needed.
         _schedule_palette_warmup()
         return None
     bpy.app.timers.register(_run, first_interval=1.0)
@@ -220,15 +219,15 @@ def register():
     except Exception:
         pass
 
-    # Arma il warm-up mode-gated anche qui, per l'enable dell'add-on a sessione già
-    # avviata (nessun load_post in quel caso). Se sei già in Sculpt mode scalda a
-    # breve; altrimenti resta in attesa dell'ingresso in sculpt.
+    # Arm the mode-gated warm-up here too, to cover enabling the add-on in an
+    # already-running session (no load_post fires in that case). If Sculpt mode is
+    # already active it warms up shortly; otherwise it waits for sculpt mode.
     _schedule_palette_warmup()
 
 
 def unregister():
     global _warmup_stop
-    _warmup_stop = True   # ferma il timer di warm-up mode-gated se in attesa
+    _warmup_stop = True   # stop the mode-gated warm-up timer if it is waiting
     if _sculptools_load_post in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(_sculptools_load_post)
     disable_preview_handler()
