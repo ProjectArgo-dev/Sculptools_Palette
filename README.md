@@ -12,7 +12,7 @@ or tap a number to switch — then get back to sculpting.
 
 [![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Z8F0234LJP)
 
-<!-- Add a demo GIF or screenshot here, e.g. ![Sculptools: Palette](docs/demo.gif) -->
+
 
 ## Features
 
