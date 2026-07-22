@@ -201,7 +201,16 @@ def _nearest_slot(angle, n=8):
 class SCULPTOOLS_OT_radial_palette(Operator):
     bl_idname  = "sculptools.radial_palette"
     bl_label   = "Sculptools Palette"
-    bl_options = {'REGISTER', 'UNDO'}
+    # NO 'UNDO' — on purpose. 'UNDO' makes Blender push a global (memfile) undo
+    # step when this modal finishes. In Sculpt Mode, once strokes have dirtied the
+    # mesh, that push serialises the WHOLE mesh into the undo memfile: O(vertices),
+    # ~2 s on dense meshes. That was the "wheel freezes for ~2 s after sculpting,
+    # then switches brush" lag — and only after sculpting, because with a clean
+    # mesh there is nothing new to serialise. The wheel needs no undo of its own:
+    # brush activation carries its own undo and the strokes stay undoable. This
+    # matches the other in-sculpt interactive operators (Quick Numbers, Dynamic
+    # Sliders), which are 'REGISTER'-only for the same reason.
+    bl_options = {'REGISTER'}
 
     def _refresh_layout(self, context):
         """Recompute num_slots (per-palette) and the EFFECTIVE values of wheel
