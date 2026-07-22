@@ -6,6 +6,7 @@ name = "Sculptools: Palette"
 tagline = "Radial palette for sculpt brushes and tools"
 maintainer = "Argo"
 type = "add-on"
+website = "https://github.com/ProjectArgo-dev/Sculptools_Palette"
 
 tags = ["Sculpt", "User Interface"]
 
