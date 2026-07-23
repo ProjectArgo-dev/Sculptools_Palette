@@ -18,22 +18,3 @@ copyright = [
   "2026 Argo",
   "2002-2024 Blender Authors (bundled Sculpt tool icons)",
 ]
-
-[build]
-paths_exclude_pattern = [
-  "__pycache__/",
-  "/.git/",
-  "/.gitignore",
-  "/.superpowers/",
-  "/docs/",
-  "/images/",
-  "/sculptools_validation/",
-  "/releases/",
-  "/dev_extract_tool_icons.py",
-  "/dev_make_action_icons.py",
-  "/dev_make_eye_icon.py",
-  "/dev_make_gear_icon.py",
-  "/CLAUDE.md",
-  "/sculptools_handoff.md",
-  "/STORE_LISTING.md",
-]
