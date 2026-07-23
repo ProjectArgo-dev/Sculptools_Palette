@@ -22,13 +22,13 @@ or tap a number to switch — then get back to sculpting.
 - **Quick Numbers** — press a number key to activate a slot without opening the wheel.
 - **Jump-to** — Ctrl + number key to jump immediately to the palette you need.
 - **Import / Export presets** — backup your palettes and their look to a shareable file.
-- **Seamless integration** — add brushes and tools from the shelf or using the radial menu.
+- **Seamless integration** — add brushes/tools from the shelf or the radial menu.
 - **Real thumbnails** — directly loaded from your own Asset libraries.
 - **Fully configurable** — dedicated **N** panel visible in Sculpt Mode.
 
 ## Requirements
 
-- **Blender 4.5 or newer** (installed as an Extension).
+- **Blender 4.5 or newer**.
 
 ## Installation
 
