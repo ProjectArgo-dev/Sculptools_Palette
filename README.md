@@ -34,7 +34,7 @@ or tap a number to switch — then get back to sculpting.
 
 **Drag & drop from the Blender Extensions Platform**
 
-Drag the extension from [extensions.blender.org](https://extensions.blender.org)
+Drag the extension from [[extensions.blender.org](https://extensions.blender.org)](https://extensions.blender.org/add-ons/sculptools-palette/)
 straight onto a Blender window.
 
 **or install from inside Blender**
