@@ -395,6 +395,17 @@ class SculptoolsPreferences(AddonPreferences):
     # future version can tell which layout wrote these prefs.
     settings_schema: IntProperty(default=0, options={'HIDDEN'}) # type: ignore
 
+    # Persisted chords for the two customisable hotkeys (Open Palette, Cycle
+    # Palette). HIDDEN: the UI stays the native capture widget in the "Palette
+    # Utilities" panel — these only hold what it captured, because editing the
+    # addon keyconfig is NOT saved by Blender (verified live on 5.2: it sets no
+    # is_user_modified, does not reach keyconfigs.user, and does not dirty the
+    # preferences), so register() would otherwise rebuild the defaults every launch.
+    # "" means "never customised" -> register() keeps the hardcoded default, so
+    # upgrading installs see no change.
+    open_key_chord: StringProperty(default="", options={'HIDDEN'}) # type: ignore
+    cycle_key_chord: StringProperty(default="", options={'HIDDEN'}) # type: ignore
+
     # "Cycle palette" hotkey: a "holder" keymap item (sculptools.cycle_palette_holder,
     # created in __init__.register, ACTIVE since v2.7.1) edited by the native keymap
     # widget. Outside the preview the operator does PASS_THROUGH; with the Preview
@@ -842,6 +853,84 @@ def _capture_chord_from_kmi(kmi):
     if not isinstance(ctype, str) or ctype in ('', 'NONE'):
         return None
     return (ctype, bool(kmi.ctrl), bool(kmi.alt), bool(kmi.shift), bool(kmi.oskey))
+
+
+# Which keymap item each persisted chord drives. Only these two hotkeys are
+# user-editable (they have capture widgets in the N-panel); the Dynamic Sliders
+# RIGHTMOUSE item, the Quick Numbers number keys and the jump items are not
+# editable, and the backward-cycle item is DERIVED from the forward chord by
+# sync_cycle_back_binding — so none of them are stored here.
+_HOTKEY_KMI_IDNAMES = {
+    "open_key_chord":  "sculptools.radial_palette",
+    "cycle_key_chord": "sculptools.cycle_palette_holder",
+}
+
+
+def _iter_hotkey_kmis(context):
+    """Yield (pref_name, kmi) for the two editable hotkeys. Empty when there is no
+    addon keyconfig (headless, or the validation stubs)."""
+    try:
+        kc = context.window_manager.keyconfigs.addon
+        km = kc.keymaps.get("Sculpt") if kc else None
+    except Exception:
+        return
+    if not km:
+        return
+    wanted = {idname: name for name, idname in _HOTKEY_KMI_IDNAMES.items()}
+    for kmi in km.keymap_items:
+        name = wanted.get(kmi.idname)
+        if name:
+            yield name, kmi
+
+
+def apply_stored_bindings(context):
+    """Preferences -> keymap: restore the customised hotkeys onto their keymap
+    items. Must run OFF the draw path (it writes keymap items).
+
+    Called from the deferred timer in __init__.register, BEFORE
+    sync_cycle_back_binding, so the backward-cycle item derives from the RESTORED
+    forward chord instead of the freshly-created default. A stored "" or an
+    unreadable chord leaves that item at its default. Defensive: never raises."""
+    try:
+        prefs = get_prefs(context)
+    except Exception:
+        return
+    for name, kmi in _iter_hotkey_kmis(context):
+        try:
+            _apply_chord_to_kmi(kmi, parse_chord(getattr(prefs, name, "")))
+        except Exception as exc:
+            print(f"Sculptools: could not restore {name}: {exc}")
+
+
+def capture_live_bindings(context):
+    """Keymap -> preferences: store whatever the native capture widget has put on
+    the two hotkey items. Returns True when at least one chord actually changed.
+
+    The widget offers no callback, so this is driven by the mirror poll in
+    panel.start_hotkey_mirror_watch. It writes PREFERENCES only, never the keymap,
+    so it can never cancel an in-progress capture; and _capture_chord_from_kmi
+    refuses the transient states that capture passes through. Writing only on a
+    real change keeps request_prefs_save out of the per-tick path. Defensive:
+    never raises."""
+    try:
+        prefs = get_prefs(context)
+    except Exception:
+        return False
+    changed = False
+    for name, kmi in _iter_hotkey_kmis(context):
+        try:
+            chord = _capture_chord_from_kmi(kmi)
+            if chord is None:
+                continue          # mid-capture / not a keyboard chord: skip
+            encoded = format_chord(chord)
+            if getattr(prefs, name, "") != encoded:
+                setattr(prefs, name, encoded)
+                changed = True
+        except Exception as exc:
+            print(f"Sculptools: could not capture {name}: {exc}")
+    if changed:
+        request_prefs_save()
+    return changed
 
 
 def sync_cycle_back_binding(context):
