@@ -190,6 +190,62 @@ def start_preview_sidebar_watch():
         _preview_watch_active = False
 
 
+# ── Hotkey mirror (native capture widget -> preferences) ──────────────────────
+# The two hotkey capture widgets write STRAIGHT to their keymap item and offer no
+# callback, and Blender does not persist edits to the addon keyconfig — so without
+# this mirror a customised hotkey is silently lost on the next launch.
+#
+# The poll only ever writes PREFERENCES, never the keymap, so it cannot cancel an
+# in-progress capture; prefs._capture_chord_from_kmi additionally refuses the
+# transient states a capture passes through.
+_hotkey_watch_active = False
+# Time the "Palette Utilities" panel was last drawn. A plain module value, so the
+# panel draw can stamp it: writing a Python variable from draw is safe, writing a
+# property or a keymap item is not.
+_HOTKEY_PANEL_SEEN = {'t': 0.0}
+# How long after the last draw the poll keeps running before disarming. Generous
+# enough to catch the capture that the user completes just before collapsing the
+# panel, short enough that a closed panel costs nothing.
+_HOTKEY_PANEL_IDLE_S = 2.0
+
+
+def note_hotkey_panel_drawn():
+    """Stamp 'the Palette Utilities panel is on screen'. Called from its draw()."""
+    import time
+    _HOTKEY_PANEL_SEEN['t'] = time.time()
+
+
+def start_hotkey_mirror_watch():
+    """Arm the poll that mirrors the two hotkey keymap items into the preferences.
+    Idempotent (a second call while already watching is a no-op); the tick
+    disarms itself once the panel has not been drawn for _HOTKEY_PANEL_IDLE_S."""
+    global _hotkey_watch_active
+    if _hotkey_watch_active:
+        return
+    _hotkey_watch_active = True
+
+    def _tick():
+        global _hotkey_watch_active
+        import time
+        if _preview_watch_stop:          # add-on unregistered
+            _hotkey_watch_active = False
+            return None
+        if (time.time() - _HOTKEY_PANEL_SEEN['t']) > _HOTKEY_PANEL_IDLE_S:
+            _hotkey_watch_active = False
+            return None                  # panel gone — stop polling
+        try:
+            from .prefs import capture_live_bindings
+            capture_live_bindings(bpy.context)
+        except Exception:
+            pass
+        return 0.4
+
+    try:
+        bpy.app.timers.register(_tick, first_interval=0.4)
+    except Exception:
+        _hotkey_watch_active = False
+
+
 def _tag_redraw_view3d(context):
     wm = context.window_manager
     for window in wm.windows:
@@ -576,6 +632,13 @@ class SCULPTOOLS_PT_palette_utils(Panel):
     def draw(self, context):
         from .prefs import (get_open_key_binding, get_cycle_key_binding,
                             keys_conflict, key_chord_label)
+        # This panel is on screen, so a hotkey capture is possible: stamp it and
+        # arm the mirror poll. Both are safe from draw — one writes a module
+        # variable, the other only registers a timer. Do NOT capture or apply
+        # bindings here: mutating a keymap item from the draw of a panel that
+        # hosts capture widgets cancels the capture.
+        note_hotkey_panel_drawn()
+        start_hotkey_mirror_watch()
         layout = self.layout
         prefs  = get_prefs(context)
 
