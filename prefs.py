@@ -77,6 +77,57 @@ def key_chord_label(key_type, ctrl=False, alt=False, shift=False, oskey=False):
     return " + ".join(parts)
 
 
+# ── Persisted hotkey chords ───────────────────────────────────────────────────
+# The two customisable hotkeys (Open Palette, Cycle Palette) are stored on the
+# preferences as one compact string each, e.g. "TAB|ctrl|shift". Two properties
+# instead of ten (5 chord fields x 2 hotkeys), and the value goes into a preset
+# JSON unchanged.
+#
+# Canonical order of the modifier tokens. format_chord always emits this order so
+# the round-trip is stable; parse_chord accepts any order and any case, because a
+# preset file is plain JSON and may be hand-edited.
+CHORD_MODIFIERS = ("ctrl", "alt", "shift", "oskey")
+
+
+def format_chord(chord):
+    """Encode a chord (type, ctrl, alt, shift, oskey) as "TYPE|mod|mod".
+
+    Only the modifiers that are SET are emitted, always in CHORD_MODIFIERS order.
+    Values are coerced through bool() because on Blender 5.x the keymap item
+    modifiers are INT (0/1), not bool. Pure — unit-tested."""
+    key = str(chord[0])
+    parts = [key]
+    for i, name in enumerate(CHORD_MODIFIERS, start=1):
+        if i < len(chord) and bool(chord[i]):
+            parts.append(name)
+    return "|".join(parts)
+
+
+def parse_chord(text):
+    """Decode a string produced by format_chord back into
+    (type, ctrl, alt, shift, oskey), or None when it cannot be read.
+
+    Returns None — never raises — for empty/blank input, a non-string, a missing
+    key, an unknown modifier token, or the placeholder 'NONE': every caller treats
+    None as "not customised" and falls back to the hardcoded default. Pure —
+    unit-tested."""
+    if not isinstance(text, str):
+        return None
+    tokens = [t.strip() for t in text.strip().split("|")]
+    if not tokens or not tokens[0]:
+        return None
+    key = tokens[0].upper()
+    if key == 'NONE':
+        return None
+    flags = {name: False for name in CHORD_MODIFIERS}
+    for tok in tokens[1:]:
+        name = tok.lower()
+        if name not in flags:
+            return None      # unknown token: refuse the whole chord
+        flags[name] = True
+    return (key,) + tuple(flags[name] for name in CHORD_MODIFIERS)
+
+
 def keys_conflict(a, b):
     """True if two chords (type, ctrl, alt, shift, oskey) are identical."""
     if a is None or b is None:
