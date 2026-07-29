@@ -969,14 +969,24 @@ class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
     bl_options  = {'INTERNAL'}
     filter_glob: StringProperty(default="*.json", options={'HIDDEN'}) # type: ignore
 
+    # Applied ONLY when ticked. Default ON so a personal backup restores the keys
+    # in one click, but a preset downloaded from someone else cannot rebind your
+    # hotkeys without you seeing the option first.
+    import_hotkeys: BoolProperty(
+        name="Import hotkeys", default=True,
+        description="Also restore the Open Palette and Cycle Palette hotkeys "
+                    "stored in this preset file") # type: ignore
+
     def draw(self, context):
         col = self.layout.column()
         col.label(text="Replaces ALL current palettes", icon='ERROR')
+        col.prop(self, "import_hotkeys")
 
     def execute(self, context):
         from .prefs import (ensure_palettes, get_prefs, _apply_palette_dict,
                             request_prefs_save, MAX_PALETTES,
-                            JUMP_MODIFIER_VALUES)
+                            JUMP_MODIFIER_VALUES, apply_stored_bindings,
+                            sync_cycle_back_binding)
         from .panel import _EXPORTED_PREFS, _tag_redraw_view3d
         from . import presets, gpu_draw
 
@@ -1015,6 +1025,26 @@ class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
                 pass
         prefs.active_palette_index = 0
 
+        # 4b. hotkeys — the only conditional part of an import
+        hotkeys = presets.sanitize_hotkeys(data.get("hotkeys", {}))
+        hotkey_note = ""
+        if hotkeys and self.import_hotkeys:
+            for key, attr in (("open", "open_key_chord"),
+                              ("cycle", "cycle_key_chord")):
+                if key in hotkeys:
+                    setattr(prefs, attr, hotkeys[key])
+            # Same mandatory order as __init__.register: the backward-cycle item
+            # is derived from the forward cycle chord, so restore first, sync after.
+            apply_stored_bindings(context)
+            sync_cycle_back_binding(context)
+            hotkey_note = f", {len(hotkeys)} hotkey(s) restored"
+            if hotkeys.get("open") and hotkeys.get("open") == hotkeys.get("cycle"):
+                # Not refused: a conflict is REPORTED symmetrically in the panel and
+                # Open wins at runtime. Say it here so it is not silent.
+                hotkey_note += " — Open and Cycle now share a key"
+        elif hotkeys:
+            hotkey_note = f", {len(hotkeys)} hotkey(s) skipped"
+
         # 5. count availability + persist + redraw
         found, total = presets.count_available_entries(
             sanitized, _available_brush_names(context), tuple(bpy.app.version))
@@ -1022,7 +1052,7 @@ class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
         _tag_redraw_view3d(context)
 
         msg = (f"Imported {len(sanitized)} palettes — "
-               f"{found}/{total} brushes & tools available")
+               f"{found}/{total} brushes & tools available" + hotkey_note)
         if skipped or clamped:
             msg += f" ({skipped} malformed and {clamped} over-limit skipped)"
             self.report({'WARNING'}, msg)
