@@ -575,7 +575,7 @@ class SCULPTOOLS_PT_palette_utils(Panel):
 
     def draw(self, context):
         from .prefs import (get_open_key_binding, get_cycle_key_binding,
-                            keys_conflict, sync_jump_bindings, key_chord_label)
+                            keys_conflict, key_chord_label)
         layout = self.layout
         prefs  = get_prefs(context)
 
@@ -613,9 +613,19 @@ class SCULPTOOLS_PT_palette_utils(Panel):
         # Jump-to-Palette: MODIFIER + number (1..8) jumps straight to that palette,
         # global in Sculpt Mode. The modifier is chosen from a dropdown (only
         # Ctrl/Alt/Shift): a closed menu, instead of the native keymap widget,
-        # prevents assigning arbitrary keys that would clash with Quick Numbers. The
-        # draw resyncs the modifier onto the 8 real keymap items.
-        sync_jump_bindings(context)
+        # prevents assigning arbitrary keys that would clash with Quick Numbers.
+        #
+        # NB: this draw does NOT call sync_jump_bindings any more. It used to, and
+        # that broke the same rule that moved sync_cycle_back_binding out of the
+        # draw (lesson 2026-07-10): mutating a keymap item from the draw of a panel
+        # that ALSO hosts native capture widgets (the two full_event=True hotkey
+        # boxes above) cancels the capture mid-"Press a key". It is a zero-write
+        # no-op at steady state, which is why it went unnoticed — but as soon as a
+        # jump kmi is out of sync (e.g. the user edited one in Preferences >
+        # Keymap) it rewrote it on EVERY redraw, right next to a live capture.
+        # The sync is redundant here anyway: the dropdown's own update callback
+        # (prefs._jump_modifier_update) covers user changes, and the deferred timer
+        # in __init__.register covers startup once the saved keyconfig has settled.
         box_jump = layout.box()
         box_jump.label(text="Jump-to Palette Hotkey", icon="KEYINGSET")
         box_jump.prop(prefs, "jump_modifier", text="Modifier")

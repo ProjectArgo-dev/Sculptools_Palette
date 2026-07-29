@@ -12,7 +12,8 @@ from .operators import (all_operator_classes, brush_context_menu,
                        SCULPTOOLS_OT_jump_palette)
 from .modal    import SCULPTOOLS_OT_radial_palette
 from .dynamic_sliders import (SCULPTOOLS_OT_dynamic_sliders,
-                              all_dynamic_slider_classes)
+                              all_dynamic_slider_classes,
+                              _disable_overlay as _disable_slider_overlay)
 from .quick_numbers import (SCULPTOOLS_OT_quick_number,
                             all_quick_number_classes, _QN_KEYS)
 from .gpu_draw import clear_texture_cache, stop_preview_queue
@@ -231,12 +232,25 @@ def unregister():
     if _sculptools_load_post in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(_sculptools_load_post)
     disable_preview_handler()
+    # The Dynamic Sliders value overlay is a SECOND draw handler, added on its
+    # modal's invoke and removed on its _finish. If the add-on is unregistered
+    # while a right-drag is still in flight (a reload during development is the
+    # realistic case), _finish never runs and the handler survives, pointing at a
+    # module that is being torn down — Blender then errors on every redraw.
+    _disable_slider_overlay()
     stop_preview_queue()
     clear_texture_cache()
     bpy.types.VIEW3D_MT_brush_context_menu.remove(brush_context_menu)
     bpy.types.UI_MT_button_context_menu.remove(toolbar_tool_context_menu)
+    # Each removal is guarded: an already-freed keymap item (a keyconfig reset, a
+    # half-finished earlier unregister) raises, and an exception escaping here used
+    # to abort the rest of unregister — leaving the add-on half-torn-down (handlers
+    # gone, classes still registered) and needing a Blender restart to recover.
     for km, kmi in _addon_keymaps:
-        km.keymap_items.remove(kmi)
+        try:
+            km.keymap_items.remove(kmi)
+        except Exception:
+            pass
     _addon_keymaps.clear()
     for cls in reversed(_all_classes):
         bpy.utils.unregister_class(cls)

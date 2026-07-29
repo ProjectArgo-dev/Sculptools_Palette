@@ -213,17 +213,37 @@ class SCULPTOOLS_OT_radial_palette(Operator):
     bl_options = {'REGISTER'}
 
     def _refresh_layout(self, context):
-        """Recompute num_slots (per-palette) and the EFFECTIVE values of wheel
-        radius and sub distance (anti-overlap, gpu_draw._effective_layout).
-        Called at invoke, on palette reload (cycle/jump: num_slots changes) and
-        on every draw frame: draw and hit-test read the same self._*, so they
-        coincide by construction."""
+        """Recompute num_slots (per-palette), the EFFECTIVE values of wheel radius
+        and sub distance (anti-overlap, gpu_draw._effective_layout) AND the cached
+        slot/sub contents. Called at invoke, on palette reload (cycle/jump:
+        num_slots changes) and on every draw frame: draw and hit-test read the same
+        self._*, so they coincide by construction.
+
+        The slot caches are refreshed HERE, in the same place as _num_slots, and
+        nowhere else: the hit-test indexes _slots by a value bounded only by
+        _num_slots, so letting the two drift apart made a click land past the end of
+        the list (IndexError). That is exactly what happened when this method was
+        called from _draw_cb — which updated _num_slots alone — right after the
+        active palette changed to one with MORE slots (deleting a palette from the
+        gear menu clamps onto a neighbour, and the wheel stays open behind it).
+        Deriving both from one call makes the desync structurally impossible."""
         prefs = get_prefs(context)
         self._num_slots = get_num_slots(context)
         self._R, self._sub_separation = _effective_layout(
             prefs.palette_radius, prefs.slot_radius,
             prefs.sub_size_factor, prefs.sub_separation,
             self._num_slots)
+        self._slots = [get_slot(context, i) for i in range(self._num_slots)]
+        self._sub_slots = [[get_sub(context, i, j) for j in range(NUM_SUBSLOTS)]
+                           for i in range(self._num_slots)]
+
+    def _slot_name(self, i):
+        """Cached name of main slot *i*, or "" when out of range. Belt-and-braces
+        over the invariant _refresh_layout now guarantees (len(_slots) ==
+        _num_slots): an out-of-range click must degrade to "empty slot", never
+        raise inside the modal. Mirrors the same guard _hit_sub and
+        gpu_draw.draw_palette already apply on their side."""
+        return self._slots[i] if 0 <= i < len(self._slots) else ""
 
     def invoke(self, context, event):
         prefs = get_prefs(context)
@@ -284,10 +304,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         self._rmb_start_size     = 0
         self._rmb_start_strength = 0.0
 
-        self._slots     = [get_slot(context, i) for i in range(self._num_slots)]
-        self._sub_slots = [[get_sub(context, i, j) for j in range(NUM_SUBSLOTS)]
-                           for i in range(self._num_slots)]
-
+        # (slot/sub caches were already filled by _refresh_layout above)
         pit = get_active_palette(context)
         self._slot_outline_c = tuple(pit.slot_outline_colour)
         self._sub_outline_c  = tuple(pit.subslot_outline_colour)
@@ -327,10 +344,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         # num_slots is per-palette: update it BEFORE re-reading the slots, so that
         # switching palette makes the geometry (including the EFFECTIVE anti-overlap
         # values) adapt to its slot count.
-        self._refresh_layout(context)
-        self._slots = [get_slot(context, i) for i in range(self._num_slots)]
-        self._sub_slots = [[get_sub(context, i, j) for j in range(NUM_SUBSLOTS)]
-                           for i in range(self._num_slots)]
+        self._refresh_layout(context)   # slot/sub caches included
         self._slot_outline_c = tuple(pit.slot_outline_colour)
         self._sub_outline_c  = tuple(pit.subslot_outline_colour)
 
@@ -341,10 +355,12 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         # the context menu operators while the modal is still running.
         # num_slots is per-palette → refresh it live so create/switch/delete
         # reflect the active palette's slot count without reopening.
+        # This also refreshes the slot caches below, so what is DRAWN and what the
+        # hit-test reads are the very same lists (they used to be two separate
+        # reads, which is how they could disagree).
         self._refresh_layout(context)
-        slots     = [get_slot(context, i) for i in range(self._num_slots)]
-        sub_slots = [[get_sub(context, i, j) for j in range(NUM_SUBSLOTS)]
-                     for i in range(self._num_slots)]
+        slots     = self._slots
+        sub_slots = self._sub_slots
         elapsed = time.time() - self._start_time
         prefs = get_prefs(context)
         pit = get_active_palette(context)
@@ -551,7 +567,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         slot  = _nearest_slot(angle, self._num_slots)
         self._quick_resolved = True
 
-        name = self._slots[slot]
+        name = self._slot_name(slot)
         if name:
             _activate_slot(name)
         self._finish(context)
@@ -708,12 +724,9 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             # Keep cached slot data in sync with prefs (may have changed via
             # the context menu while the modal is still running). num_slots is
             # per-palette and the EFFECTIVE layout depends on n → recompute
-            # everything (R/sub_separation included) so the hit-test below always
-            # matches the drawn wheel.
+            # everything (R/sub_separation AND the slot caches) so the hit-test
+            # below always matches the drawn wheel.
             self._refresh_layout(context)
-            self._slots     = [get_slot(context, i) for i in range(self._num_slots)]
-            self._sub_slots = [[get_sub(context, i, j) for j in range(NUM_SUBSLOTS)]
-                               for i in range(self._num_slots)]
             self._update_hover(self._mx, self._my)
             return {'RUNNING_MODAL'}
 
@@ -762,7 +775,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
 
             slot = self._hit_slot(self._mx, self._my)
             if slot is not None:
-                name = self._slots[slot]
+                name = self._slot_name(slot)
                 if name and is_popup(name):
                     self._pending_popup = name   # fire on RELEASE
                     return {'RUNNING_MODAL'}

@@ -600,12 +600,12 @@ def _get_tool_icon_texture(spec):
 
 
 # ── centre block (counter, name, wordmark, hints, gear/eye) ───────────────────
-_icon_tex_cache: dict = {}   # name -> GPUTexture, oppure False se mancante/rotta
+_icon_tex_cache: dict = {}   # name -> GPUTexture, or False if missing/broken
 
 
 def _get_icon_texture(name):
-    """GPUTexture di icons/<name>.png, cache per nome. NON applica maschera
-    circolare (sono glifi, non coin)."""
+    """GPUTexture for icons/<name>.png, cached per name. Does NOT apply the
+    circular mask (these are glyphs, not coins)."""
     cached = _icon_tex_cache.get(name)
     if cached is not None:
         return cached or None

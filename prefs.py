@@ -58,7 +58,7 @@ _KEY_LABELS = {
 
 
 def key_label(key_type):
-    """Simbolo/etichetta mostrata negli hint centrali per un event.type."""
+    """Symbol/label shown in the centre hints for an event.type."""
     if key_type in _KEY_LABELS:
         return _KEY_LABELS[key_type]
     if len(key_type) == 1:
@@ -67,7 +67,7 @@ def key_label(key_type):
 
 
 def key_chord_label(key_type, ctrl=False, alt=False, shift=False, oskey=False):
-    """Etichetta di una chord (tipo + modificatori), es. 'Ctrl + Tab'."""
+    """Label for a chord (type + modifiers), e.g. 'Ctrl + Tab'."""
     parts = []
     if ctrl:  parts.append("Ctrl")
     if alt:   parts.append("Alt")
@@ -78,21 +78,21 @@ def key_chord_label(key_type, ctrl=False, alt=False, shift=False, oskey=False):
 
 
 def keys_conflict(a, b):
-    """True se due chord (type, ctrl, alt, shift, oskey) sono identiche."""
+    """True if two chords (type, ctrl, alt, shift, oskey) are identical."""
     if a is None or b is None:
         return False
     return tuple(a) == tuple(b)
 
 
 def wrap_index(i, n, delta):
-    """Indice successivo con wrap; 0 se n<=0."""
+    """Next index with wrap-around; 0 when n <= 0."""
     if n <= 0:
         return 0
     return (i + delta) % n
 
 
 def clamp_index(i, n):
-    """Vincola i in [0, n-1]; 0 se n<=0."""
+    """Clamp i into [0, n-1]; 0 when n <= 0."""
     if n <= 0:
         return 0
     return max(0, min(i, n - 1))

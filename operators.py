@@ -592,7 +592,7 @@ class SCULPTOOLS_MT_assign_tool(Menu):
             entries = [e for e in TOOLS
                        if e.category == cat and tool_available(e, ver)]
             if not entries:
-                continue  # es. "Add" su Blender < 5.2 → niente header
+                continue  # e.g. "Add" on Blender < 5.2 → no header at all
             layout.label(text=cat)
             for e in entries:
                 op = layout.operator("sculptools.assign_tool_to_slot", text=e.display)
