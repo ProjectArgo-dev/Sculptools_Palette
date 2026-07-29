@@ -88,6 +88,23 @@ def key_chord_label(key_type, ctrl=False, alt=False, shift=False, oskey=False):
 # preset file is plain JSON and may be hand-edited.
 CHORD_MODIFIERS = ("ctrl", "alt", "shift", "oskey")
 
+# Factory defaults for the two customisable hotkeys — the SINGLE source of truth.
+# __init__.register builds its keymap items from these, and "Reset Hotkeys"
+# restores them; they used to be literals at the keymap_items.new() call site,
+# which meant the reset would have had to keep a second, drifting copy.
+DEFAULT_HOTKEY_CHORDS = {
+    "open_key_chord":  ('BACK_SLASH', False, False, False, False),
+    "cycle_key_chord": ('TAB',        False, False, False, False),
+}
+
+
+def chord_kmi_kwargs(chord):
+    """A chord as keyword arguments for KeyMapItems.new(), so register() can be
+    driven by DEFAULT_HOTKEY_CHORDS instead of literals. Pure — unit-tested."""
+    ctype, cctrl, calt, cshift, coskey = chord
+    return {"type": ctype, "ctrl": cctrl, "alt": calt,
+            "shift": cshift, "oskey": coskey}
+
 
 def format_chord(chord):
     """Encode a chord (type, ctrl, alt, shift, oskey) as "TYPE|mod|mod".
@@ -931,6 +948,47 @@ def capture_live_bindings(context):
     if changed:
         request_prefs_save()
     return changed
+
+
+def reset_hotkeys_to_defaults(context):
+    """Factory-reset the three hotkey controls of the "Palette Utilities" panel:
+    the two captured chords (Open, Cycle) and the Jump-to Palette modifier.
+    Touches nothing else — not the palettes, not the appearance, not the Sculpt
+    Interaction toggles. Must run OFF the draw path (it writes keymap items).
+
+    Clearing the stored chords is NOT sufficient on its own: apply_stored_bindings
+    reads "" as "never customised" and deliberately leaves the keymap item alone,
+    so the item would keep whatever the capture widget last wrote to it. The
+    DEFAULT_HOTKEY_CHORDS are therefore applied explicitly.
+
+    Note the stored chords are unset rather than assigned: the mirror poll will
+    re-capture the (now default) keymap items and store them explicitly on its
+    next tick. "" and "BACK_SLASH" mean the same thing to every reader, so that is
+    harmless. Defensive: never raises."""
+    try:
+        prefs = get_prefs(context)
+    except Exception:
+        return
+    for name in DEFAULT_HOTKEY_CHORDS:
+        try:
+            prefs.property_unset(name)
+        except Exception:
+            pass
+    for name, kmi in _iter_hotkey_kmis(context):
+        try:
+            _apply_chord_to_kmi(kmi, DEFAULT_HOTKEY_CHORDS.get(name))
+        except Exception as exc:
+            print(f"Sculptools: could not reset {name}: {exc}")
+    try:
+        prefs.property_unset("jump_modifier")
+    except Exception:
+        pass
+    sync_jump_bindings(context)
+    # ORDER MATTERS, as in __init__.register: the backward-cycle item is DERIVED
+    # from the forward cycle chord, so it can only be synced once the forward
+    # chord is back at its default.
+    sync_cycle_back_binding(context)
+    request_prefs_save()
 
 
 def sync_cycle_back_binding(context):

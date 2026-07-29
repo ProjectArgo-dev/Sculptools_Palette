@@ -351,6 +351,30 @@ class SCULPTOOLS_OT_reset_all_palettes(Operator):
         return {'FINISHED'}
 
 
+class SCULPTOOLS_OT_reset_hotkeys(Operator):
+    bl_idname   = "sculptools.reset_hotkeys"
+    bl_label    = "Reset Hotkeys"
+    bl_description = ("Restore the default hotkeys: Open Palette to \\, Cycle "
+                      "Palette to Tab, and the Jump-to Palette modifier to Ctrl. "
+                      "Does not touch palettes, appearance or the Sculpt "
+                      "Interaction toggles")
+    bl_options  = {'INTERNAL'}
+
+    def invoke(self, context, event):
+        # invoke_confirm is safe here: this button only ever lives in the N-panel,
+        # where nothing holds the input grab. (From the wheel's gear menu it would
+        # be discarded — see SCULPTOOLS_OT_delete_palette.)
+        return context.window_manager.invoke_confirm(
+            self, event, title="Reset Hotkeys?")
+
+    def execute(self, context):
+        from .prefs import reset_hotkeys_to_defaults
+        reset_hotkeys_to_defaults(context)
+        _tag_redraw_view3d(context)
+        self.report({'INFO'}, "Sculptools: hotkeys reset to defaults")
+        return {'FINISHED'}
+
+
 class SCULPTOOLS_OT_cycle_palette_holder(Operator):
     """Hosts the palette-cycle keymap item (chord editable with the native widget,
     like Open) and — since v2.7.1 — ACTUALLY cycles the palettes when the Preview
@@ -695,6 +719,11 @@ class SCULPTOOLS_PT_palette_utils(Panel):
         layout.label(text="Modifier + number (1–8) jumps straight to that palette.",
                      icon="INFO")
 
+        # Factory reset of the three hotkeys above (Open, Cycle, Jump modifier).
+        # Placed here, under the last of them, so it reads as applying to the group.
+        layout.operator("sculptools.reset_hotkeys", text="Reset Hotkeys",
+                        icon="LOOP_BACK")
+
         # ── Sculpt Interaction ───────────────────────────────────────────────
         box_ds = layout.box()
         box_ds.label(text="Sculpt Interaction", icon="BRUSH_DATA")
@@ -709,6 +738,7 @@ class SCULPTOOLS_PT_palette_utils(Panel):
 all_panel_classes = [
     SCULPTOOLS_OT_reset_palette_appearance,
     SCULPTOOLS_OT_reset_all_palettes,
+    SCULPTOOLS_OT_reset_hotkeys,
     SCULPTOOLS_OT_cycle_palette_holder,
     SCULPTOOLS_OT_cycle_palette_back_holder,
     SCULPTOOLS_OT_toggle_preview,

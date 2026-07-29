@@ -6,7 +6,9 @@
 
 import bpy
 persistent = bpy.app.handlers.persistent
-from .prefs    import SculptoolsPreferences, PaletteItem, MAX_PALETTES
+from .prefs    import (SculptoolsPreferences, PaletteItem, MAX_PALETTES,
+                       DEFAULT_HOTKEY_CHORDS, chord_kmi_kwargs,
+                       cycle_back_binding)
 from .operators import (all_operator_classes, brush_context_menu,
                        toolbar_tool_context_menu,
                        SCULPTOOLS_OT_jump_palette)
@@ -105,9 +107,12 @@ def register():
     kc = wm.keyconfigs.addon
     if kc:
         km  = kc.keymaps.new(name="Sculpt", space_type="EMPTY")
+        # The two editable hotkeys are created from prefs.DEFAULT_HOTKEY_CHORDS,
+        # not from literals: "Reset Hotkeys" restores the very same values, and a
+        # second copy of them here would eventually drift out of sync.
         kmi = km.keymap_items.new(
-            SCULPTOOLS_OT_radial_palette.bl_idname,
-            type="BACK_SLASH", value="PRESS")
+            SCULPTOOLS_OT_radial_palette.bl_idname, value="PRESS",
+            **chord_kmi_kwargs(DEFAULT_HOTKEY_CHORDS["open_key_chord"]))
         _addon_keymaps.append((km, kmi))
 
         # Palette-cycle keymap item: hosts the native keymap widget (default Tab)
@@ -116,8 +121,8 @@ def register():
         # preview the key keeps its native behaviour. The wheel modal still reads
         # its chord (prefs.get_cycle_key_binding) for the in-wheel cycle.
         kmi_cycle = km.keymap_items.new(
-            "sculptools.cycle_palette_holder",
-            type="TAB", value="PRESS")
+            "sculptools.cycle_palette_holder", value="PRESS",
+            **chord_kmi_kwargs(DEFAULT_HOTKEY_CHORDS["cycle_key_chord"]))
         _addon_keymaps.append((km, kmi_cycle))
 
         # BACKWARD palette cycle: a twin keymap item Shift+<cycle key>. NOT edited
@@ -125,9 +130,13 @@ def register():
         # (type/ctrl/alt/oskey copied, shift forced True, active only if the forward
         # one does not already use Shift). Created on the Shift+Tab default; the sync
         # realigns it as soon as the keyconfig is ready.
+        # Derived from the forward chord (same helper the sync uses), so there is
+        # no third copy of the default key either. [:5] drops the trailing
+        # `active` flag that cycle_back_binding returns.
         kmi_cycle_back = km.keymap_items.new(
-            "sculptools.cycle_palette_back_holder",
-            type="TAB", value="PRESS", shift=True)
+            "sculptools.cycle_palette_back_holder", value="PRESS",
+            **chord_kmi_kwargs(
+                cycle_back_binding(DEFAULT_HOTKEY_CHORDS["cycle_key_chord"])[:5]))
         _addon_keymaps.append((km, kmi_cycle_back))
 
         # Dynamic Sliders: plain right-click (PRESS). We override the native
