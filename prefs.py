@@ -801,6 +801,49 @@ def _apply_back_binding_to_kmi(kmi, desired):
     return writes
 
 
+def _apply_chord_to_kmi(kmi, chord):
+    """Write a chord onto a keymap item. Returns the number of writes performed
+    (0 = already correct, so this is zero-write at steady state).
+
+    `chord` None means "the user never customised this hotkey": the item is left
+    exactly as register() created it.
+
+    map_type is forced to 'KEYBOARD' BEFORE `type`, for the same reason as
+    _apply_back_binding_to_kmi: an item stranded on map_type 'MOUSE' has no
+    keyboard keys in its `type` enum, so writing type='TAB' RAISES. Modifiers are
+    compared through bool() because they are INT (0/1) on Blender 5.x."""
+    if chord is None:
+        return 0
+    ctype, cctrl, calt, cshift, coskey = chord
+    writes = 0
+    if getattr(kmi, 'map_type', 'KEYBOARD') != 'KEYBOARD':
+        kmi.map_type = 'KEYBOARD';           writes += 1
+    if kmi.type != ctype:                    kmi.type = ctype;    writes += 1
+    if bool(kmi.ctrl) != bool(cctrl):        kmi.ctrl = cctrl;    writes += 1
+    if bool(kmi.alt) != bool(calt):          kmi.alt = calt;      writes += 1
+    if bool(kmi.shift) != bool(cshift):      kmi.shift = cshift;  writes += 1
+    if bool(kmi.oskey) != bool(coskey):      kmi.oskey = coskey;  writes += 1
+    return writes
+
+
+def _capture_chord_from_kmi(kmi):
+    """Read a keymap item into a chord, or None when the item is not in a state
+    worth persisting.
+
+    This is the validation gate that keeps a half-finished capture out of the
+    preferences. The native capture widget passes through transient states while
+    the user is pressing keys — including map_type 'MOUSE' — and storing one of
+    those would persist garbage that a later restart would faithfully restore.
+    Both hotkeys are always keyboard chords, so anything that is not a real
+    KEYBOARD key is refused."""
+    if getattr(kmi, 'map_type', None) != 'KEYBOARD':
+        return None
+    ctype = getattr(kmi, 'type', None)
+    if not isinstance(ctype, str) or ctype in ('', 'NONE'):
+        return None
+    return (ctype, bool(kmi.ctrl), bool(kmi.alt), bool(kmi.shift), bool(kmi.oskey))
+
+
 def sync_cycle_back_binding(context):
     """Keeps the BACKWARD-cycle keymap item
     (sculptools.cycle_palette_back_holder) aligned with the forward cycle: copies
