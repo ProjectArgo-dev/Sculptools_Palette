@@ -13,9 +13,14 @@ FORMAT_ID = "sculptools_palette_preset"
 SCHEMA_VERSION = 1
 
 
-def build_preset_dict(palette_dicts, appearance, addon_version, blender_version):
-    """Assemble the top-level file dict from already-read pieces."""
-    return {
+def build_preset_dict(palette_dicts, appearance, addon_version, blender_version,
+                      hotkeys=None):
+    """Assemble the top-level file dict from already-read pieces.
+
+    `hotkeys` is a keyword with a default so the signature stays compatible with
+    existing callers and tests. When None the "hotkeys" key is omitted entirely,
+    which is exactly what an older add-on reading the file would expect."""
+    out = {
         "format": FORMAT_ID,
         "schema": SCHEMA_VERSION,
         "addon_version": addon_version,
@@ -23,6 +28,9 @@ def build_preset_dict(palette_dicts, appearance, addon_version, blender_version)
         "appearance": dict(appearance),
         "palettes": list(palette_dicts),
     }
+    if hotkeys:
+        out["hotkeys"] = dict(hotkeys)
+    return out
 
 
 def validate_preset(data):
@@ -109,6 +117,30 @@ def sanitize_appearance(raw, known_keys, enum_choices=None):
                 out[k] = v
         elif isinstance(v, (int, float, bool)):
             out[k] = v
+    return out
+
+
+# The two hotkeys a preset can carry. Kept in their own top-level block rather
+# than inside "appearance" for two reasons: a chord is a free-form string that
+# needs parse_chord validation (sanitize_appearance only takes numbers, bools and
+# declared enum identifiers), and hotkeys are the ONLY preset data applied
+# conditionally — the import operator's "Import hotkeys" checkbox.
+HOTKEY_KEYS = ("open", "cycle")
+
+
+def sanitize_hotkeys(raw):
+    """Keep only recognised hotkey entries whose value is a readable chord, and
+    return them re-encoded in canonical form. Anything else — a non-dict, an
+    unknown key, a non-string, an unparseable chord — is dropped silently, so a
+    corrupt or hand-edited file can never reach the keymap. Pure; no bpy."""
+    from .prefs import parse_chord, format_chord
+    out = {}
+    if not isinstance(raw, dict):
+        return out
+    for key in HOTKEY_KEYS:
+        chord = parse_chord(raw.get(key))
+        if chord is not None:
+            out[key] = format_chord(chord)
     return out
 
 

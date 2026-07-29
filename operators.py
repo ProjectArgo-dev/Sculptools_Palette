@@ -889,6 +889,19 @@ def _read_appearance(prefs):
     return out
 
 
+def _read_hotkeys(prefs):
+    """Read the two persisted hotkey chords for the export file. Only chords the
+    user actually customised are written: an untouched hotkey stores "" and is
+    omitted, so importing such a preset leaves that key alone instead of pinning
+    it to a default."""
+    out = {}
+    for key, attr in (("open", "open_key_chord"), ("cycle", "cycle_key_chord")):
+        value = getattr(prefs, attr, "") or ""
+        if value:
+            out[key] = value
+    return out
+
+
 def _available_brush_names(context):
     """Best-effort set of brush names resolvable now. Runs the one allowed
     Essentials preload so bundled brushes count as present (Golden Rule #3:
@@ -935,7 +948,8 @@ class SCULPTOOLS_OT_export_palettes(Operator, ExportHelper):
         palette_dicts = [_read_palette_dict(p) for p in prefs.palettes]
         data = presets.build_preset_dict(
             palette_dicts, _read_appearance(prefs),
-            _addon_version_string(), tuple(bpy.app.version))
+            _addon_version_string(), tuple(bpy.app.version),
+            hotkeys=_read_hotkeys(prefs))
         try:
             with open(self.filepath, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
