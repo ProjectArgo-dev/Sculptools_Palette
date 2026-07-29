@@ -204,12 +204,25 @@ def register():
     # freshly created at the default modifier (Ctrl); Blender re-applies the
     # user's saved keyconfig customisations (which may have changed the holder's
     # modifier) only AFTER this. A one-shot timer re-reads the holder once things
-    # have settled and propagates its modifier to the 8 items. The panel draw
-    # syncs too, so this only matters if the user jumps before ever opening the
-    # 'Palette' sidebar tab in a session.
+    # have settled and propagates its modifier to the 8 items. Together with the
+    # jump_modifier dropdown's own update callback this is now the ONLY place the
+    # jump items are synced — the panel draw used to do it too, until that was
+    # removed for mutating a keymap item next to a live capture widget.
+    #
+    # It also restores the two persisted hotkey chords (prefs.open_key_chord /
+    # cycle_key_chord) for the same timing reason: Blender re-applies saved
+    # keyconfig customisations after register() returns, so writing the keymap
+    # here — rather than in register()'s body — is what makes the restore stick.
     def _sync_jump_startup():
         try:
-            from .prefs import sync_jump_bindings, sync_cycle_back_binding
+            from .prefs import (sync_jump_bindings, sync_cycle_back_binding,
+                                apply_stored_bindings)
+            # ORDER MATTERS. Restore the user's customised Open/Cycle chords FIRST:
+            # sync_cycle_back_binding derives the Shift+<cycle key> item from the
+            # forward cycle chord, so if it ran first it would derive from the
+            # default TAB that the keymap_items.new() call above just created, and
+            # backward cycling would be bound to the wrong key all session.
+            apply_stored_bindings(bpy.context)
             sync_jump_bindings(bpy.context)
             sync_cycle_back_binding(bpy.context)
         except Exception as exc:
