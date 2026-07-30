@@ -632,7 +632,17 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         # ── the open hotkey (default '\') closes the palette ─────────────────
         # Uses the key that actually opened the wheel, captured in invoke(),
         # so it tracks whatever binding the user set for the operator.
-        if event.type == self._open_key and event.value == 'PRESS':
+        # is_repeat MUST be excluded: while the key is HELD the OS emits further
+        # PRESS events, and a running modal receives them all (KeyMapItem.repeat
+        # =False only stops the KEYMAP dispatcher from re-firing the operator, it
+        # does not filter what reaches modal()). Without this guard the first
+        # auto-repeat — after the OS repeat delay, ~500ms on Windows — closed the
+        # wheel by itself, so holding the hotkey to look around the wheel before
+        # choosing was impossible (GitHub issue #1). Only a deliberate second
+        # press closes. getattr keeps a hypothetical event without the attribute
+        # behaving as "not a repeat" instead of raising.
+        if (event.type == self._open_key and event.value == 'PRESS'
+                and not getattr(event, "is_repeat", False)):
             self._finish(context)
             return {'CANCELLED'}
 
