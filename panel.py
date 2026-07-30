@@ -246,6 +246,27 @@ def start_hotkey_mirror_watch():
         _hotkey_watch_active = False
 
 
+def prefs_autosave_off(context):
+    """True when Blender's "Save on Exit" preference is off.
+
+    That single checkbox decides whether anything this add-on stores ever reaches
+    disk. Palettes, slot assignments and hotkey chords all live in
+    AddonPreferences, and `prefs.request_prefs_save` deliberately declines to
+    write them when the user has turned "Save on Exit" off — forcing a save would
+    override someone who manages their preferences by hand. But Blender does not
+    save on exit either, so the two together mean everything is lost on restart,
+    with nothing on screen to explain why (a user reported exactly that). The
+    panel uses this to say so out loud and offer a one-off manual save.
+
+    A context without readable preferences reads as False: a panel draw must
+    never raise, and silence is better than a warning we cannot substantiate.
+    """
+    try:
+        return not bool(context.preferences.use_preferences_save)
+    except Exception:
+        return False
+
+
 def _tag_redraw_view3d(context):
     wm = context.window_manager
     for window in wm.windows:
@@ -550,6 +571,23 @@ class SCULPTOOLS_PT_palette(Panel):
     def draw(self, context):
         layout = self.layout
         prefs  = get_prefs(context)
+
+        # ── nothing will be saved warning (first thing in the tab) ────────────
+        # Only shown when the user has turned Blender's "Save on Exit" off, which
+        # silently costs them every assignment and hotkey at the next restart —
+        # see prefs_autosave_off. The button is Blender's own Save Preferences:
+        # an explicit, user-initiated save, so the add-on still never writes the
+        # preferences behind their back.
+        if prefs_autosave_off(context):
+            boxw = layout.box()
+            colw = boxw.column(align=True)
+            colw.label(text='"Save on Exit" is off in Preferences.',
+                       icon="ERROR")
+            colw.label(text="Palette and hotkey changes will not")
+            colw.label(text="survive a restart.")
+            colw.separator()
+            colw.operator("wm.save_userpref", text="Save Preferences",
+                          icon="FILE_TICK")
 
         # ── This palette (per-palette settings; also hosts the palette name) ─
         prefs_ensured = ensure_palettes(context)
