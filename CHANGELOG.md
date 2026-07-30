@@ -42,7 +42,7 @@ All notable changes to **Sculptools: Palette** are listed here, newest first.
 - Reloading the add-on in the middle of a right-click drag left a stale slider overlay
   behind.
 
-## 1.0.0 — First public release
+## 1.0.0 — 2026-07-23
 
 First release on the Blender Extensions Platform: the radial palette for sculpt brushes
 and tools, up to 8 palettes of 10 slots × 3 sub-slots, Quick Numbers, Jump-to, Dynamic
