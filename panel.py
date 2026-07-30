@@ -246,19 +246,79 @@ def start_hotkey_mirror_watch():
         _hotkey_watch_active = False
 
 
-# Text of the "Save on Exit is off" warning, one entry per rendered line.
+# ── "Save on Exit is off" warning text ────────────────────────────────────────
 # Blender's label() does NOT word-wrap: it clips long text with an ellipsis in the
-# middle, so the lines have to be pre-broken and SHORT. The first attempt used
-# full sentences and came back clipped to '"Save on E…references.' on a sidebar
-# measured at 220px / ui_scale 1 — around 22 characters beside an icon. Hence the
-# budget below, pinned by test_autosave_off_warning; the continuation lines carry
-# BLANK1 so every line shares the same left origin and the same budget.
+# middle. So the warning is wrapped here, against the sidebar's CURRENT width, by
+# measuring the real widget font with blf rather than guessing an average
+# character advance (guessing is how the first attempt shipped clipped text).
+_AUTOSAVE_WARN_TEXT = ("Save on Exit is off: palettes & hotkeys "
+                       "are lost on restart.")
+
+# Chrome to subtract from the region width, measured live at ui_scale 1 on a
+# 220px sidebar: the clipped strings Blender rendered are exactly as wide as the
+# space that was available, which gave 126px of text beside an icon.
+_WARN_CHROME_PX = 65.0   # panel margins + box padding
+_WARN_ICON_PX   = 29.0   # the ERROR / BLANK1 column on every label row
+_WARN_SAFETY_PX = 6.0    # slack, so a greedy fit never lands a hair over
+
+# Shown when the width cannot be measured at all. Pre-broken and short enough for
+# the narrowest real sidebar (~22 characters beside an icon at 220px), with the
+# budget pinned by test_autosave_off_warning.
 _AUTOSAVE_WARN_LINES = (
     "Save on Exit is off",
     "Palettes & hotkeys",
     "are lost on restart",
 )
 _AUTOSAVE_WARN_MAX_CHARS = 19
+
+
+def wrap_text_to_width(text, max_px, measure):
+    """Pure: greedily wrap `text` into lines no wider than `max_px`, using the
+    `measure(str) -> px` callable to size each candidate line.
+
+    A single word wider than `max_px` still gets a line of its own: clipping one
+    long word beats dropping it, and beats looping forever trying to fit it.
+    Returns [] for empty or missing text. Taking `measure` as an argument is what
+    keeps this testable with no font available.
+    """
+    words = str(text or "").split()
+    if not words:
+        return []
+    lines, cur = [], words[0]
+    for word in words[1:]:
+        candidate = cur + " " + word
+        if measure(candidate) <= max_px:
+            cur = candidate
+        else:
+            lines.append(cur)
+            cur = word
+    lines.append(cur)
+    return lines
+
+
+def _warn_text_lines(context):
+    """The autosave warning, broken to fit the sidebar as it is right now.
+
+    Measures the actual widget font: blf is already a dependency (gpu_draw draws
+    the slot labels with it) and it always sets its own size before measuring, so
+    changing the size of font 0 here cannot disturb anything else. Any failure —
+    no region, no styles, blf unavailable — degrades to the short pre-broken
+    lines rather than risking clipped prose.
+    """
+    try:
+        import blf
+        scale = float(context.preferences.system.ui_scale) or 1.0
+        style = context.preferences.ui_styles[0]
+        blf.size(0, style.widget.points * scale)
+        avail = (float(context.region.width)
+                 - (_WARN_CHROME_PX + _WARN_ICON_PX + _WARN_SAFETY_PX) * scale)
+        if avail <= 0:
+            return list(_AUTOSAVE_WARN_LINES)
+        lines = wrap_text_to_width(_AUTOSAVE_WARN_TEXT, avail,
+                                  lambda s: blf.dimensions(0, s)[0])
+        return lines or list(_AUTOSAVE_WARN_LINES)
+    except Exception:
+        return list(_AUTOSAVE_WARN_LINES)
 
 
 def prefs_autosave_off(context):
@@ -596,7 +656,7 @@ class SCULPTOOLS_PT_palette(Panel):
         if prefs_autosave_off(context):
             boxw = layout.box()
             colw = boxw.column(align=True)
-            for i, line in enumerate(_AUTOSAVE_WARN_LINES):
+            for i, line in enumerate(_warn_text_lines(context)):
                 colw.label(text=line, icon="ERROR" if i == 0 else "BLANK1")
             colw.separator()
             colw.operator("wm.save_userpref", text="Save Preferences",
