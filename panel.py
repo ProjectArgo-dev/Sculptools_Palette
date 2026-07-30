@@ -246,6 +246,21 @@ def start_hotkey_mirror_watch():
         _hotkey_watch_active = False
 
 
+# Text of the "Save on Exit is off" warning, one entry per rendered line.
+# Blender's label() does NOT word-wrap: it clips long text with an ellipsis in the
+# middle, so the lines have to be pre-broken and SHORT. The first attempt used
+# full sentences and came back clipped to '"Save on E…references.' on a sidebar
+# measured at 220px / ui_scale 1 — around 22 characters beside an icon. Hence the
+# budget below, pinned by test_autosave_off_warning; the continuation lines carry
+# BLANK1 so every line shares the same left origin and the same budget.
+_AUTOSAVE_WARN_LINES = (
+    "Save on Exit is off",
+    "Palettes & hotkeys",
+    "are lost on restart",
+)
+_AUTOSAVE_WARN_MAX_CHARS = 19
+
+
 def prefs_autosave_off(context):
     """True when Blender's "Save on Exit" preference is off.
 
@@ -581,10 +596,8 @@ class SCULPTOOLS_PT_palette(Panel):
         if prefs_autosave_off(context):
             boxw = layout.box()
             colw = boxw.column(align=True)
-            colw.label(text='"Save on Exit" is off in Preferences.',
-                       icon="ERROR")
-            colw.label(text="Palette and hotkey changes will not")
-            colw.label(text="survive a restart.")
+            for i, line in enumerate(_AUTOSAVE_WARN_LINES):
+                colw.label(text=line, icon="ERROR" if i == 0 else "BLANK1")
             colw.separator()
             colw.operator("wm.save_userpref", text="Save Preferences",
                           icon="FILE_TICK")
