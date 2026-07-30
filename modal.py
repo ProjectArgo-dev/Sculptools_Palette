@@ -28,6 +28,10 @@ QUICK_FLICK_WINDOW = 0.18   # seconds after opening during which a fast, decisiv
                             # mouse flick toward a slot will instantly select it
 QUICK_FLICK_DIST_FACTOR = 0.5  # fraction of palette radius the cursor must
                                 # travel from the press point to count as a flick
+QUICK_FLICK_HELD_DIST_FACTOR = 0.75  # same, but for the dilated flick mode that
+                                # lasts as long as the open hotkey is held: a wider
+                                # ring, so hesitating with the key down leaves room
+                                # to move around before committing to a direction
 
 # ── module-level state shared with operators ──────────────────────────────────
 _slot_clipboard      = {'brush': ''}      # copy/paste between slots
@@ -563,14 +567,24 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         # the wheel back to hover+click, and the tap path is untouched — a tap
         # releases the key well inside the window, so it expires on schedule.
         elapsed = time.time() - self._start_time
-        if elapsed > QUICK_FLICK_WINDOW and not self._open_key_down:
+        dilated = elapsed > QUICK_FLICK_WINDOW
+        if dilated and not self._open_key_down:
             self._quick_resolved = True
             return False
 
+        # Past the original window we are in the dilated flick mode, which only
+        # exists while the key is held — and there the cursor must cross a WIDER
+        # ring, so hesitating and drifting about does not commit by accident.
+        # The two modes are told apart by TIME, not by the key state: a fast
+        # tap+flick can easily complete with the key still down, so keying off
+        # _open_key_down would have quietly raised the bar for the classic
+        # gesture too. Inside the window the threshold is untouched.
         dx = mx - self._cx
         dy = my - self._cy
         dist = math.hypot(dx, dy)
-        if dist < self._R * QUICK_FLICK_DIST_FACTOR:
+        factor = (QUICK_FLICK_HELD_DIST_FACTOR if dilated
+                  else QUICK_FLICK_DIST_FACTOR)
+        if dist < self._R * factor:
             return False
 
         angle = math.atan2(dy, dx)
