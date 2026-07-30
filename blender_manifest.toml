@@ -1,14 +1,14 @@
 schema_version = "1.0.0"
 
 id = "sculptools_palette"
-version = "1.0.0"
+version = "1.1.0"
 name = "Sculptools: Palette"
 tagline = "Radial palette for sculpt brushes and tools"
 maintainer = "Argo"
 type = "add-on"
-website = "https://github.com/ProjectArgo-dev/Sculptools_Palette"
+website = "https://extensions.blender.org/add-ons/sculptools-palette/"
 
-tags = ["Sculpt", "User Interface"]
+tags = ["Sculpt", "User Interface", "3D View"]
 
 blender_version_min = "4.5.0"
 

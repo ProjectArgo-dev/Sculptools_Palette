@@ -21,7 +21,9 @@ or tap a number to switch — then get back to sculpting.
 - **Up to 8 palettes**, each with 10 main slots × 3 sub-slots — switch whole sets instantly.
 - **Quick Numbers** — press a number key to activate a slot without opening the wheel.
 - **Jump-to** — Ctrl + number key to jump immediately to the palette you need.
-- **Import / Export presets** — backup your palettes and their look to a shareable file.
+- **Import / Export presets** — backup your palettes, their look and your hotkeys to a
+  shareable file.
+- **Custom hotkeys** — rebind the palette keys; they are remembered across restarts.
 - **Seamless integration** — add brushes/tools from the shelf or the radial menu.
 - **Real thumbnails** — directly loaded from your own Asset libraries.
 - **Fully configurable** — dedicated **N** panel visible in Sculpt Mode.
@@ -61,15 +63,24 @@ switched off from the **Palette** sidebar tab:
 | Shortcut | Action |
 | --- | --- |
 | `\` (Backslash) | Open the radial palette |
+| `\` (held) | **Flick mode**: pick a slot by flicking the cursor out towards it |
 | `Tab` / `Shift + Tab` | Cycle to next / previous palette |
 | `Ctrl` + `1`–`8` | Jump directly to palette 1–8 |
 | `1`–`9`, `0` | **Quick Numbers**: activate a slot's brush (repeat to cycle sub-slots) |
 | Right-click + drag | **Dynamic Brush Sliders**: adjust brush Radius / Strength |
 
+> **Flick mode:** tap `\` and flick the cursor straight at a slot to select it in one
+> gesture. Holding the key down keeps that gesture alive for as long as you need, so you
+> can pause and aim; release the key to fall back to hovering and clicking.
+
 > **Note:** Quick Numbers and Dynamic Brush Sliders change how the number keys and the
 > right mouse button behave in Sculpt Mode. Both are enabled by default and can be turned
 > off at any time in the **Palette** sidebar tab. A quick right-click still opens Blender's
 > native context menu.
+
+## Changelog
+
+Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Licence
 
