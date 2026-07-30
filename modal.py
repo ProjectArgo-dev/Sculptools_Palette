@@ -288,6 +288,11 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         self._start_time  = time.time()
         self._quick_resolved = False   # becomes True once the quick-flick
                                         # window has been used up or consumed
+        # True while the key that opened the wheel is still held down. The wheel
+        # is always born on a PRESS, so it starts held; the release branch at the
+        # bottom of modal() clears it. Holding freezes the quick-flick window
+        # open (see _check_quick_flick) so the user can hesitate before flicking.
+        self._open_key_down = True
         self._finished    = False      # guards _finish() against double-call
         self._pending_popup = None     # a menu-opener slot clicked on PRESS is
                                         # fired on RELEASE (so the popup opens
@@ -552,8 +557,13 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         opening window, activate that slot's brush immediately and close —
         mirroring the Blender/Maya pie-menu 'flick' shortcut. Only main slots
         are eligible; sub-slots are intentionally never quick-selected."""
+        # The window does not run out while the open hotkey is still HELD: the
+        # user asked for a hold to buy thinking time, so they can pause, decide a
+        # direction and only then flick (GitHub issue #1). Releasing the key hands
+        # the wheel back to hover+click, and the tap path is untouched — a tap
+        # releases the key well inside the window, so it expires on schedule.
         elapsed = time.time() - self._start_time
-        if elapsed > QUICK_FLICK_WINDOW:
+        if elapsed > QUICK_FLICK_WINDOW and not self._open_key_down:
             self._quick_resolved = True
             return False
 
@@ -826,6 +836,19 @@ class SCULPTOOLS_OT_radial_palette(Operator):
 
         # Let scroll wheel pass through for brush size even without Ctrl
         if event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
+            return {'PASS_THROUGH'}
+
+        # ── the open hotkey was released: the quick-flick window may expire ───
+        # Deliberately the LAST branch. The open key is whatever type invoke()
+        # saw, so a release branch placed earlier could shadow a real one — the
+        # LEFTMOUSE and RIGHTMOUSE releases above drive the gear menu, deferred
+        # popups and the right-drag sliders. Sitting here, a release reaches this
+        # branch only when no other branch claimed it, with no need to blacklist
+        # pointer types (and "MOUSE" is not a reliable marker anyway: PEN and
+        # ERASER are stylus buttons). PASS_THROUGH, not RUNNING_MODAL: this only
+        # updates our own state and has no business swallowing the event.
+        if event.type == self._open_key and event.value == 'RELEASE':
+            self._open_key_down = False
             return {'PASS_THROUGH'}
 
         # Anything not handled above (stray keystrokes, window (de)activate, …)
