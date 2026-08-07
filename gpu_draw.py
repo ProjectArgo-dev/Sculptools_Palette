@@ -360,10 +360,44 @@ def clear_texture_cache():
 # below is applied ON TOP of that purely to soften/antialias the disc edge;
 # it is no longer load-bearing for the crop, so a numpy-less environment (or
 # any mask failure) can only cost a slightly harder edge, never a square.
+#
+# Width of that soft edge, as a fraction of the thumbnail radius (see
+# _circular_alpha_mask for why a fraction and not a texel count). 0.045 puts it
+# at ~2px on screen at the default slot radius of 50 — enough to read as smooth
+# through the unfiltered texture sampling, small enough not to look blurry.
+# This is the single knob to turn if the rim ever looks too hard or too soft.
+_THUMB_FEATHER_FRAC = 0.045
+
+
 def _circular_alpha_mask(w, h):
-    """Return a flat (w*h,) alpha mask: 1.0 inside the inscribed circle, 0.0
-    outside, with a ~1px antialiased edge. numpy fast path with a pure-Python
-    fallback. Cached per (w, h)."""
+    """Return a flat (w*h,) alpha mask: 1.0 well inside the inscribed circle,
+    fading to 0.0 AT the inscribed circle over a feather band. numpy fast path
+    with a pure-Python fallback. Cached per (w, h).
+
+    Two properties matter, and the original 1-texel edge had neither:
+
+    • The ramp lies ENTIRELY INSIDE the circle. _draw_textured_disc rasterises
+      a fan whose rim samples uv-radius 0.5 — exactly this mask's radius — so a
+      ramp CENTRED on the radius gets cut in half by the geometry. Worse, the
+      texture is sampled unfiltered (Blender binds GPUTextures with the default
+      NEAREST sampler and the Python API exposes no way to change it), so the
+      texel actually landing on the rim jitters by up to a texel: measured on a
+      256px preview the old mask left alpha 1.00 on the axes, ~0.55 on the
+      diagonals and 0.06 in between. That is a hard, angle-dependent cut — the
+      stair-stepped thumbnail rim users reported. Ending the ramp at the rim
+      makes the polygon edge itself fully transparent, so it can never show.
+
+    • The feather is a FRACTION of the radius, not a fixed texel count. Previews
+      ship at 256px or 146px and tool icons at 256px, but they are all drawn
+      into the same slot, so a constant texel width would land as a different
+      on-screen softness per source. A fraction keeps the screen-space feather
+      identical (feather_px = _THUMB_FEATHER_FRAC * disc_radius_px), and wide
+      enough (~2px at the default slot radius) to survive the ~2.8:1
+      minification of a 256px preview into a 92px disc.
+
+    This is the same coverage-AA-in-what-we-upload idea as the geometric
+    feather in _draw_ring, done CPU-side because the built-in IMAGE_COLOR
+    shader has no per-vertex alpha. No GPU state is touched (golden rule #1)."""
     key = (w, h)
     cached = _mask_cache.get(key)
     if cached is not None:
@@ -371,10 +405,13 @@ def _circular_alpha_mask(w, h):
     cx = (w - 1) / 2.0
     cy = (h - 1) / 2.0
     radius = min(w, h) / 2.0
+    # Outermost texel centre reachable by the fan: the ramp must hit 0 here.
+    edge    = radius - 0.5
+    feather = max(1.0, radius * _THUMB_FEATHER_FRAC)
     if _np is not None:
         yy, xx = _np.mgrid[0:h, 0:w]
         dist = _np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
-        mask = _np.clip(radius - dist + 0.5, 0.0, 1.0).astype(_np.float32).ravel()
+        mask = _np.clip((edge - dist) / feather, 0.0, 1.0).astype(_np.float32).ravel()
     else:
         mask = [0.0] * (w * h)
         for y in range(h):
@@ -382,7 +419,7 @@ def _circular_alpha_mask(w, h):
             row = y * w
             for x in range(w):
                 d = math.sqrt((x - cx) ** 2 + dy2)
-                v = radius - d + 0.5
+                v = (edge - d) / feather
                 mask[row + x] = 0.0 if v <= 0.0 else (1.0 if v >= 1.0 else v)
     _mask_cache[key] = mask
     return mask
