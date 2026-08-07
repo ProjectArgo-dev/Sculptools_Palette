@@ -255,6 +255,10 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         self._sr         = prefs.slot_radius
         self._hover_del  = prefs.hover_delay
         self._fade_out   = prefs.fade_out_duration
+        # "Fixed Sub-Slot Visibility": snapshot like the two timings it
+        # supersedes — the panel is unreachable while the modal holds the grab,
+        # so re-reading it per event could only cost consistency.
+        self._fixed_subs = prefs.fixed_subslot_visibility
         self._slot_outline_w      = prefs.slot_outline_width
         self._sub_outline_w       = prefs.subslot_outline_width
         self._slot_outline_c      = tuple(prefs.slot_outline_colour)
@@ -287,7 +291,9 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         self._hover_since = {}   # slot_i → time when cursor entered
         self._leave_time  = {}   # slot_i → time when cursor left
         self._sub_alpha   = {}   # slot_i → 0..1
-        self._sub_vis     = set()
+        # Seeded full when sub-slots are pinned open, so the very first frame —
+        # drawn before any MOUSEMOVE reaches _update_hover — already shows them.
+        self._sub_vis     = set(range(self._num_slots)) if self._fixed_subs else set()
 
         self._start_time  = time.time()
         self._quick_resolved = False   # becomes True once the quick-flick
@@ -517,6 +523,21 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             self._hov_slot = new_slot
 
         self._hov_sub = new_sub
+        self._gear_hov = self._hit_gear(mx, my)
+
+        # "Fixed Sub-Slot Visibility": sub-slots stay open for as long as the
+        # wheel does, so the reveal/fade state machine below has nothing to time
+        # in or out and is skipped entirely. Hover detection ran above and is
+        # shared by both paths, so highlighting behaves exactly as it does when
+        # the toggle is off — only visibility differs.
+        # Rebuilt from _num_slots on every call rather than cached: cycling or
+        # jumping to a palette with a DIFFERENT slot count then heals itself on
+        # the next tick instead of leaving a stale set behind.
+        if self._fixed_subs:
+            self._sub_vis = set(range(self._num_slots))
+            for i in self._sub_vis:
+                self._sub_alpha[i] = 1.0
+            return
 
         new_vis = set()
 
@@ -551,7 +572,6 @@ class SCULPTOOLS_OT_radial_palette(Operator):
                         self._hover_since.pop(i, None)
                         self._leave_time.pop(i, None)
 
-        self._gear_hov = self._hit_gear(mx, my)
         self._sub_vis = new_vis
 
     # ── quick flick selection (Blender/Maya-style pie shortcut) ─────────────

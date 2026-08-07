@@ -365,8 +365,12 @@ _APPEARANCE_PROPS = [
 # deliberately NOT in _APPEARANCE_PROPS, because that list is what "Delete All
 # Palettes" unsets: a factory reset restores the LOOK, it must not silently
 # rebind the jump modifier or switch the Quick Numbers / Dynamic Sliders toggles.
+# fixed_subslot_visibility sits here, next to the two timings it supersedes,
+# and NOT in _APPEARANCE_PROPS despite its checkbox living in the Appearance
+# panel: it is a behaviour switch, and resetting the look must not turn it off
+# behind a user who deliberately turned it on.
 _INTERACTION_PROPS = [
-    "hover_delay", "fade_out_duration",
+    "hover_delay", "fade_out_duration", "fixed_subslot_visibility",
     "dynamic_sliders_enabled", "quick_numbers_enabled",
     "jump_modifier",
 ]
@@ -695,6 +699,10 @@ class SCULPTOOLS_PT_palette(Panel):
         if not prefs.fixed_slot_outline:
             col.label(text='Turning "Fixed Slot Outline" ON while tuning the '
                            'Palette appearance is suggested.', icon="INFO")
+        # Below the hint, not between it and its own checkbox: the hint is
+        # conditional, so anything drawn above it would jump a row whenever
+        # Fixed Slot Outline is toggled.
+        col.prop(prefs, "fixed_subslot_visibility")
         # Gradient Size/Falloff, Sub-slot Size and Sub-slot Distance are NO longer
         # exposed in the panel (user request): they remain active properties with
         # their defaults (1.6 / 2.5 / 0.70 / 55.0) and are still read by

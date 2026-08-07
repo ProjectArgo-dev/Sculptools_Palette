@@ -561,6 +561,13 @@ class SculptoolsPreferences(AddonPreferences):
                     "their configured colour and width. When off, outlines appear "
                     "only on hover",
         update=_preview_redraw) # type: ignore
+    fixed_subslot_visibility: BoolProperty(
+        name="Fixed Sub-Slot Visibility", default=False,
+        description="When on, every sub-slot stays open for as long as the "
+                    "palette is, instead of appearing on hover and fading out. "
+                    "Hover Delay and Sub-slot Fade Out have no effect while "
+                    "this is on",
+        update=_preview_redraw) # type: ignore
 
     # Quick Numbers: number keys select/cycle slot brushes without the wheel
     quick_numbers_enabled: BoolProperty(
