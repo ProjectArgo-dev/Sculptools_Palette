@@ -21,9 +21,8 @@ or tap a number to switch — then get back to sculpting.
 - **Up to 8 palettes**, each with 10 main slots × 3 sub-slots — switch whole sets instantly.
 - **Quick Numbers** — press a number key to activate a slot without opening the wheel.
 - **Jump-to** — Ctrl + number key to jump immediately to the palette you need.
-- **Import / Export presets** — backup your palettes, their look and your hotkeys to a
-  shareable file.
 - **Custom hotkeys** — rebind the palette keys; they are remembered across restarts.
+- **Import / Export presets** — backup your palettes and hotkeys to a shareable file.
 - **Seamless integration** — add brushes/tools from the shelf or the radial menu.
 - **Real thumbnails** — directly loaded from your own Asset libraries.
 - **Fully configurable** — dedicated **N** panel visible in Sculpt Mode.

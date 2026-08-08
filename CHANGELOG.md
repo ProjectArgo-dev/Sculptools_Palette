@@ -2,6 +2,20 @@
 
 All notable changes to **Sculptools: Palette** are listed here, newest first.
 
+## 1.2.0 — 2026-08-08
+
+### Added
+
+- **Fixed Sub-Slot Visibility**, a new toggle in *Palette Appearance* (off by default).
+  With it on, every sub-slot stays open for as long as the wheel is, instead of appearing
+  after the hover delay and fading out again. Flick selection still reaches main slots
+  only, as before.
+
+### Fixed
+
+- The inner edge of slot thumbnails is smoother: the circular fade ended a fraction too
+  far out, which left a faintly ragged rim that shifted around the circle.
+
 ## 1.1.0 — 2026-07-30
 
 ### Added

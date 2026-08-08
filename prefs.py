@@ -564,9 +564,8 @@ class SculptoolsPreferences(AddonPreferences):
     fixed_subslot_visibility: BoolProperty(
         name="Fixed Sub-Slot Visibility", default=False,
         description="When on, every sub-slot stays open for as long as the "
-                    "palette is, instead of appearing on hover and fading out. "
-                    "Hover Delay and Sub-slot Fade Out have no effect while "
-                    "this is on",
+                    "palette is. Flick selection still reaches main slots "
+                    "only, never sub-slots",
         update=_preview_redraw) # type: ignore
 
     # Quick Numbers: number keys select/cycle slot brushes without the wheel

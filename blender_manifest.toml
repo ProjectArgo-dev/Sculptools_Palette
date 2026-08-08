@@ -1,10 +1,10 @@
 schema_version = "1.0.0"
 
 id = "sculptools_palette"
-version = "1.1.0"
+version = "1.2.0"
 name = "Sculptools: Palette"
 tagline = "Radial palette for sculpt brushes and tools"
-maintainer = "Argo"
+maintainer = "ProjectArgo"
 type = "add-on"
 website = "https://extensions.blender.org/add-ons/sculptools-palette/"
 
@@ -15,6 +15,6 @@ blender_version_min = "4.5.0"
 license = ["SPDX:GPL-3.0-or-later"]
 
 copyright = [
-  "2026 Argo",
+  "2026 ProjectArgo",
   "2002-2024 Blender Authors (bundled Sculpt tool icons)",
 ]
