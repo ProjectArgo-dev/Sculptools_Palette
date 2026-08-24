@@ -2,6 +2,20 @@
 
 All notable changes to **Sculptools: Palette** are listed here, newest first.
 
+## 1.2.1 — 2026-08-24
+
+### Fixed
+
+- **Entering Sculpt Mode for the first time no longer freezes Blender.** The add-on
+  prepares the thumbnails for every palette the first time you enter Sculpt Mode in a
+  session. That work now runs in small slices between redraws instead of all in one go,
+  so the viewport stays responsive while it finishes. Reported in issue #3.
+- **Thumbnails load several times faster.** Reading the artwork for Blender's bundled
+  brushes dropped to roughly a tenth of what it cost before, on Blender 4.5 and 5.x alike.
+- **The wait no longer grows with the size of your Asset Libraries.** A palette entry that
+  could not be found used to send the add-on through every `.blend` file in every
+  configured library in a single uninterruptible pass.
+
 ## 1.2.0 — 2026-08-08
 
 ### Added
