@@ -286,6 +286,32 @@ def _iter_asset_library_blend_files():
             continue
 
 
+def _scan_one_library_file(entry, remaining):
+    """Link ONE asset-library .blend, cache whichever of *remaining* it holds,
+    record where each was found so the modal can activate it later, and return
+    the set found. Shared by the synchronous scan (_load_custom_previews, used
+    by resolve_asset_source) and by the chunked drain in _process_preview_queue.
+
+    Holds _custom_scan_active only for this one file: restoring the active brush
+    inside the link can ask to resolve a custom source, and that must not start a
+    nested scan — but blocking resolution for the whole drain would be worse.
+    """
+    global _custom_scan_active
+    lib_name, lib_root, blend = entry
+    _custom_scan_active = True
+    try:
+        found = _load_previews_from_file(blend, remaining)
+    finally:
+        _custom_scan_active = False
+    for n in found:
+        try:
+            rel = os.path.relpath(blend, lib_root).replace(os.sep, "/")
+            _asset_source[n] = (lib_name, f"{rel}/Brush/{n}")
+        except Exception:
+            pass
+    return found
+
+
 def _load_custom_previews(names):
     """Generalise the Essentials fast path to ANY custom brush library: for the
     given brush *names* not already cached, scan the .blend files under the
@@ -301,21 +327,10 @@ def _load_custom_previews(names):
     remaining = {n for n in names if n not in _bundled_preview_cache}
     if not remaining:
         return
-    _custom_scan_active = True
-    try:
-        for lib_name, lib_root, blend in _iter_asset_library_blend_files():
-            if not remaining:
-                break
-            found = _load_previews_from_file(blend, remaining)
-            for n in found:
-                try:
-                    rel = os.path.relpath(blend, lib_root).replace(os.sep, "/")
-                    _asset_source[n] = (lib_name, f"{rel}/Brush/{n}")
-                except Exception:
-                    pass
-            remaining -= found
-    finally:
-        _custom_scan_active = False
+    for entry in _iter_asset_library_blend_files():
+        if not remaining:
+            break
+        remaining -= _scan_one_library_file(entry, remaining)
     # Names not found in any library → mark as a miss so we don't rescan forever.
     for n in names:
         _bundled_preview_cache.setdefault(n, None)
@@ -376,7 +391,7 @@ _mask_cache: dict           = {}   # (w, h) → flat float32 alpha mask
 
 
 def clear_texture_cache():
-    global _bundled_preload_done
+    global _bundled_preload_done, _drain_state
     _tex_cache.clear()
     _tex_masked.clear()
     _preview_requested.clear()
@@ -386,6 +401,7 @@ def clear_texture_cache():
     _tool_icon_missing.clear()
     _icon_tex_cache.clear()
     _bundled_preload_done = False
+    _drain_state = None
 
 
 # ── circular thumbnail edge softening (CPU-side alpha mask) ────────────────────
@@ -772,6 +788,22 @@ def _draw_center(state):
     gpu.state.blend_set('ALPHA')
 
 
+# Work budget for ONE timer tick, and the delay before the next slice. The
+# drain used to run to completion inside a single callback, which blocks
+# Blender's main thread for as long as it takes — that is what users saw as a
+# multi-second freeze on first entry into Sculpt mode (GitHub issue #3). The
+# scan of the configured Asset Libraries is unbounded: it visits EVERY .blend in
+# EVERY library whenever one assigned name cannot be resolved. Budgeting per
+# tick makes the cost independent of how big the user's libraries are.
+_PREVIEW_TICK_BUDGET_S   = 0.015   # ~one frame of work, then yield
+_PREVIEW_TICK_INTERVAL_S = 0.01    # delay before resuming
+
+# Resumable state of an in-flight drain, or None when idle. Kept at module level
+# (not on the timer closure) so stop_preview_queue/clear_texture_cache can drop
+# a half-finished drain on unregister or reload.
+_drain_state = None
+
+
 def _process_preview_queue():
     """Runs via bpy.app.timers — NOT inside a draw callback — so it is safe
     to call operators (or do file I/O) here. Blender forbids running
@@ -779,62 +811,90 @@ def _process_preview_queue():
     doing so silently fails, which is why thumbnails previously never
     appeared.
 
-    The whole pending set is drained in one pass: first a single batched
-    read of real, curated artwork straight from Blender's shipped Essentials
-    library file (see preload_bundled_previews), then — only for brushes that
-    aren't one of Blender's own (a custom user brush, for instance) — a
-    per-brush fallback to lib_id_generate_preview(), which for Brush IDs only
-    ever produces a generic placeholder-style render rather than real stroke
-    artwork, but is the best available option for something outside
-    Essentials."""
-    global _queue_timer_running
+    Resolution order per brush: the batched read of Blender's shipped
+    Essentials library (see preload_bundled_previews), then the user's own
+    asset libraries, then — only for a plain local brush that is neither —
+    lib_id_generate_preview(), which for Brush IDs yields a generic
+    placeholder rather than real stroke artwork but is the best available.
 
-    # Always ensure the WHOLE Essentials preview set is loaded in one pass the
-    # first time anything is processed. After this, no per-slot assignment
-    # ever has to touch the Essentials library again (which was dropping the
-    # active brush and delaying icons until the wheel was reopened).
+    The work is CHUNKED: each call does at most _PREVIEW_TICK_BUDGET_S of
+    work and then returns an interval so Blender redraws, instead of running
+    to completion and freezing the UI. It always completes at least one unit
+    before checking the budget, so the timer cannot spin without progress.
+    Returns None only when there is nothing left to do."""
+    global _queue_timer_running, _drain_state
+
+    deadline = time.time() + _PREVIEW_TICK_BUDGET_S
+
+    # Phase 0 — the Essentials preload. Deliberately NOT chunked: it holds a
+    # linked library for its duration and transiently unsets the active sculpt
+    # brush, so it must not straddle ticks with the wheel able to open in
+    # between. Idempotent, and ~0.1 s now that the pixels are read in bulk.
     preload_bundled_previews()
 
-    if not _pending_preview_names:
-        _queue_timer_running = False
-        return None  # unregister the timer
+    if _drain_state is None:
+        if not _pending_preview_names:
+            _queue_timer_running = False
+            return None
+        names = list(_pending_preview_names)
+        _pending_preview_names.clear()
+        asset_map = {n: _asset_name_for_brush(n) for n in names}
+        _drain_state = {
+            "names": names,
+            "asset_map": asset_map,
+            # Names the Essentials preload did not resolve may belong to a
+            # user's custom brush library. This also covers names with no live
+            # datablock yet (e.g. just after reopening a file), which the
+            # generic fallback below cannot handle.
+            "remaining": {asset_map[n] for n in names
+                          if asset_map[n] not in _bundled_preview_cache},
+            "files": None,   # library file list, materialised on first need
+            "file_i": 0,
+            "name_i": 0,
+        }
 
-    names = list(_pending_preview_names)
-    _pending_preview_names.clear()
+    st = _drain_state
 
-    asset_map = {n: _asset_name_for_brush(n) for n in names}
+    # Phase 1 — custom asset-library scan, a few files per tick.
+    if st["remaining"]:
+        if st["files"] is None:
+            st["files"] = list(_iter_asset_library_blend_files())
+        while st["file_i"] < len(st["files"]) and st["remaining"]:
+            entry = st["files"][st["file_i"]]
+            st["file_i"] += 1
+            st["remaining"] -= _scan_one_library_file(entry, st["remaining"])
+            if time.time() >= deadline:
+                return _PREVIEW_TICK_INTERVAL_S
+        # Scan exhausted → record the misses so we never rescan for them.
+        for asset in st["asset_map"].values():
+            _bundled_preview_cache.setdefault(asset, None)
+        st["remaining"] = set()
 
-    # Custom asset-library artwork: any pending name the Essentials preload
-    # didn't resolve may belong to a user's custom brush library — read its
-    # curated preview straight from the library's .blend (same mechanism as
-    # Essentials, generalised). This also covers names with no live datablock
-    # yet (e.g. after reopening a file), which the generic fallback below can't.
-    unresolved = {asset_map[n] for n in names
-                  if asset_map[n] not in _bundled_preview_cache}
-    if unresolved:
-        _load_custom_previews(unresolved)
-
-    # Generic fallback (lib_id_generate_preview) only for brushes still without
-    # curated artwork AND that are plain local brushes. Skipped for curated
+    # Phase 2 — generic fallback, one brush at a time. Skipped for curated
     # brushes (asset / linked from a library): they already carry a real
     # preview, and regenerating one for a Brush ID only ever yields a generic
     # grey placeholder — overwriting the real artwork (custom-library grey bug).
-    for n in names:
-        if _bundled_preview_cache.get(asset_map[n]) is not None:
-            continue
-        brush = bpy.data.brushes.get(n)
-        if not brush:
-            continue
-        if getattr(brush, "library", None) or getattr(brush, "asset_data", None):
-            continue
-        try:
-            with bpy.context.temp_override(id=brush):
-                bpy.ops.ed.lib_id_generate_preview()
-        except Exception as exc:
-            print(f"Sculptools: preview generation failed for '{n}': {exc}")
+    names = st["names"]
+    while st["name_i"] < len(names):
+        n = names[st["name_i"]]
+        st["name_i"] += 1
+        if _bundled_preview_cache.get(st["asset_map"][n]) is None:
+            brush = bpy.data.brushes.get(n)
+            if (brush and not getattr(brush, "library", None)
+                    and not getattr(brush, "asset_data", None)):
+                try:
+                    with bpy.context.temp_override(id=brush):
+                        bpy.ops.ed.lib_id_generate_preview()
+                except Exception as exc:
+                    print(f"Sculptools: preview generation failed for '{n}': {exc}")
+        if time.time() >= deadline:
+            return _PREVIEW_TICK_INTERVAL_S
 
+    _drain_state = None
+    if _pending_preview_names:
+        return _PREVIEW_TICK_INTERVAL_S   # more arrived while we were working
     _queue_timer_running = False
-    return None  # done — unregister until something new is queued
+    return None
 
 
 def _ensure_preview_timer():
@@ -880,6 +940,8 @@ def stop_preview_queue():
             pass
         _queue_timer_running = False
     _pending_preview_names.clear()
+    global _drain_state
+    _drain_state = None
 
 
 def request_preview_by_name(brush_name: str) -> bool:
