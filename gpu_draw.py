@@ -154,6 +154,40 @@ def _restore_active_sculpt_brush(name):
         print(f"Sculptools: could not restore active brush '{name}': {exc}")
 
 
+def _read_rna_float_array(rna_array, count):
+    """Copy an RNA float array out in ONE bulk call instead of element by element.
+
+    Reading `preview.image_pixels_float` through list() costs one Python-level
+    RNA access per float. Measured on Blender 5.2 (GitHub issue #3): the ~2.8 M
+    floats of the 64 Essentials brush previews took 0.33 s of the 0.56 s spent
+    warming up on first entry into Sculpt mode — 59% of it. foreach_get is a
+    single bulk copy in C and returns byte-identical data (verified against the
+    old path on a live 5.2: same 65 cache entries, max pixel difference 0.0).
+
+    Falls back to the per-element read when numpy is absent or the object has no
+    foreach_get, so a plain sequence (as the validation stubs pass) still works.
+    """
+    if _np is not None:
+        foreach = getattr(rna_array, "foreach_get", None)
+        if foreach is not None:
+            arr = _np.empty(count, dtype=_np.float32)
+            foreach(arr)
+            return arr
+    return list(rna_array)
+
+
+def _any_opaque(raw):
+    """True if any alpha (every 4th float) clears the transparency epsilon.
+
+    Vectorised for numpy buffers on purpose: scanning ~65 k alpha values per
+    brush from Python would hand back most of what the bulk read above saves.
+    """
+    alpha = raw[3::4]
+    if _np is not None and isinstance(alpha, _np.ndarray):
+        return bool(alpha.size) and bool(alpha.max() > 0.01)
+    return any(a > 0.01 for a in alpha)
+
+
 def _extract_preview_pixels(brush):
     """Copy a brush's baked-in preview into (w, h, raw_floats), or None if it
     has no usable (non-transparent) image/icon preview. Prefers the full
@@ -170,10 +204,10 @@ def _extract_preview_pixels(brush):
             attr = 'icon_pixels_float'
         if w <= 0 or h <= 0:
             return None
-        raw = list(getattr(prev, attr))
+        raw = _read_rna_float_array(getattr(prev, attr), w * h * 4)
     except Exception:
         return None
-    if len(raw) >= w * h * 4 and any(a > 0.01 for a in raw[3::4]):
+    if len(raw) >= w * h * 4 and _any_opaque(raw):
         return (w, h, raw)
     return None
 
@@ -467,7 +501,12 @@ def _build_texture(w, h, raw):
     mask = _circular_alpha_mask(w, h)
     if _np is not None:
         try:
-            arr = _np.asarray(raw[:n], dtype=_np.float32)
+            # _np.array (not asarray): raw may itself be a float32 array
+            # from the bulk preview read, and asarray would hand back a
+            # VIEW of it — the sRGB decode and alpha mask below would then
+            # write straight into _bundled_preview_cache, so a second build
+            # of the same brush would decode twice. Always copy.
+            arr = _np.array(raw[:n], dtype=_np.float32)
             if arr.size >= n:
                 arr = arr[:n]
                 if _DECODE_SRGB_PREVIEWS:
