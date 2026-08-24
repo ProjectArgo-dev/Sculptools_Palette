@@ -5,6 +5,7 @@ import os
 import math
 import time
 import zlib
+import json
 import blf
 import gpu
 from gpu_extras.batch import batch_for_shader
@@ -17,6 +18,8 @@ try:
     import numpy as _np
 except Exception:
     _np = None
+
+from . import preview_index as _pidx
 
 # ── colours ───────────────────────────────────────────────────────────────────
 C_BG         = (0.12, 0.12, 0.12, 0.88)
@@ -243,9 +246,17 @@ def _load_previews_from_file(path, names):
     active_snapshot = _snapshot_active_sculpt_brush()
     try:
         with bpy.data.libraries.load(path, link=True, assets_only=True) as (data_from, data_to):
-            present = (list(data_from.brushes) if names is None
-                       else [n for n in names if n in data_from.brushes])
+            available = list(data_from.brushes)
+            present = (available if names is None
+                       else [n for n in names if n in available])
             data_to.brushes = present
+        if not available:
+            # No brush assets in this file AT ALL — not merely none of the ones
+            # asked for. Only that stronger fact is safe to cache: skipping a
+            # file that does hold brushes would hide them from a later lookup.
+            global _preview_index_dirty
+            _pidx.record_empty(_preview_index, path, _file_stamp(path))
+            _preview_index_dirty = True
         for brush in (data_to.brushes or []):
             if brush is None:
                 continue
@@ -286,6 +297,84 @@ def _iter_asset_library_blend_files():
             continue
 
 
+# ── persistent index of where custom-library brushes live ─────────────────────
+# Resolving a non-Essentials brush means opening .blend files until one holds it.
+# On a large library that dominates startup: a reporter profiled 2909 files at
+# 11.1 s, of which 2908 held no brushes at all (issue #3). Without a memory the
+# add-on paid that again on every launch. This index makes it a one-time cost.
+_preview_index         = _pidx.new_index()
+_preview_index_loaded  = False
+_preview_index_dirty   = False
+
+
+def _file_stamp(path):
+    """(mtime, size) for *path*, or None if it cannot be stated. Used to notice
+    a recorded-empty file changing, so it gets reopened."""
+    try:
+        st = os.stat(path)
+        return (st.st_mtime, st.st_size)
+    except Exception:
+        return None
+
+
+def _preview_index_path():
+    """Where the index is cached: the extension's own per-user data directory
+    (bpy.utils.extension_path_user, available since the 4.2 extensions system).
+    Returns None if that cannot be resolved — under the validation stubs, for
+    instance — in which case the index simply stays in memory for the session."""
+    try:
+        base = bpy.utils.extension_path_user(__package__, path="", create=True)
+    except Exception:
+        return None
+    if not base:
+        return None
+    return os.path.join(base, "preview_index.json")
+
+
+def _ensure_preview_index():
+    """Load the cached index once per session. A missing, unreadable or corrupt
+    file is not an error: it costs a rescan, which is exactly the old behaviour."""
+    global _preview_index, _preview_index_loaded
+    if _preview_index_loaded:
+        return
+    _preview_index_loaded = True
+    path = _preview_index_path()
+    if not path:
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            _preview_index = _pidx.validate(json.load(fh))
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        print(f"Sculptools: preview index unreadable, rebuilding ({exc})")
+
+
+def _save_preview_index():
+    """Write the index back if anything was learned. Best-effort: failing to
+    write a cache must never surface to the user."""
+    global _preview_index_dirty
+    if not _preview_index_dirty:
+        return
+    _preview_index_dirty = False
+    path = _preview_index_path()
+    if not path:
+        return
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(_preview_index, fh)
+    except Exception as exc:
+        print(f"Sculptools: could not save preview index: {exc}")
+
+
+def _plan_library_scan(remaining):
+    """The library files worth opening for *remaining*, newly learned knowledge
+    applied. Shared by the synchronous and chunked scan paths."""
+    _ensure_preview_index()
+    return _pidx.plan_scan(_preview_index, set(remaining),
+                           list(_iter_asset_library_blend_files()), _file_stamp)
+
+
 def _scan_one_library_file(entry, remaining):
     """Link ONE asset-library .blend, cache whichever of *remaining* it holds,
     record where each was found so the modal can activate it later, and return
@@ -303,10 +392,14 @@ def _scan_one_library_file(entry, remaining):
         found = _load_previews_from_file(blend, remaining)
     finally:
         _custom_scan_active = False
+    global _preview_index_dirty
     for n in found:
         try:
             rel = os.path.relpath(blend, lib_root).replace(os.sep, "/")
-            _asset_source[n] = (lib_name, f"{rel}/Brush/{n}")
+            rel_id = f"{rel}/Brush/{n}"
+            _asset_source[n] = (lib_name, rel_id)
+            _pidx.record_found(_preview_index, n, lib_name, rel_id, blend)
+            _preview_index_dirty = True
         except Exception:
             pass
     return found
@@ -327,10 +420,11 @@ def _load_custom_previews(names):
     remaining = {n for n in names if n not in _bundled_preview_cache}
     if not remaining:
         return
-    for entry in _iter_asset_library_blend_files():
+    for entry in _plan_library_scan(remaining):
         if not remaining:
             break
         remaining -= _scan_one_library_file(entry, remaining)
+    _save_preview_index()
     # Names not found in any library → mark as a miss so we don't rescan forever.
     for n in names:
         _bundled_preview_cache.setdefault(n, None)
@@ -858,7 +952,7 @@ def _process_preview_queue():
     # Phase 1 — custom asset-library scan, a few files per tick.
     if st["remaining"]:
         if st["files"] is None:
-            st["files"] = list(_iter_asset_library_blend_files())
+            st["files"] = _plan_library_scan(st["remaining"])
         while st["file_i"] < len(st["files"]) and st["remaining"]:
             entry = st["files"][st["file_i"]]
             st["file_i"] += 1
@@ -866,6 +960,7 @@ def _process_preview_queue():
             if time.time() >= deadline:
                 return _PREVIEW_TICK_INTERVAL_S
         # Scan exhausted → record the misses so we never rescan for them.
+        _save_preview_index()
         for asset in st["asset_map"].values():
             _bundled_preview_cache.setdefault(asset, None)
         st["remaining"] = set()
