@@ -104,7 +104,9 @@ def plan_scan(index, remaining, entries, stamp_of):
     Files the index has already located one of those names in come first, so the
     common case opens exactly one file. If every remaining name is accounted for
     that way, nothing else is returned at all — that is what turns a full library
-    walk into a single open.
+    walk into a single open. A name counts as accounted for only while its
+    recorded file is still present: once it moves, the name goes back to needing
+    the full walk, so a reorganised library heals instead of stranding the brush.
 
     Otherwise the rest follow, minus any file recorded as holding no brushes
     whose stamp still matches. A file that cannot be stamped is never skipped:
@@ -120,11 +122,16 @@ def plan_scan(index, remaining, entries, stamp_of):
     all_known = True
     for name in remaining:
         rec = known_source(index, name)
-        if rec is None:
+        entry = by_path.get(rec[2]) if rec is not None else None
+        if entry is None:
+            # Either never seen, or recorded in a file that is no longer where we
+            # left it. Both mean the name is NOT accounted for, so the full walk
+            # below has to run: that is what re-finds the brush at its new path
+            # and lets the index repair itself. Treating a stale record as
+            # "known" would open nothing at all and strand the brush.
             all_known = False
             continue
-        entry = by_path.get(rec[2])
-        if entry is not None and rec[2] not in seen:
+        if rec[2] not in seen:
             seen.add(rec[2])
             plan.append(entry)
 
@@ -143,16 +150,9 @@ def plan_scan(index, remaining, entries, stamp_of):
     return plan
 
 
-def prune(index, path_exists):
-    """Drop entries whose .blend is gone, so the cache cannot grow forever as
-    libraries are reorganised. Returns how many entries were removed."""
-    removed = 0
-    for name, rec in list((index.get("found") or {}).items()):
-        if not path_exists(rec[2]):
-            del index["found"][name]
-            removed += 1
-    for path in list((index.get("empty") or {}).keys()):
-        if not path_exists(path):
-            del index["empty"][path]
-            removed += 1
-    return removed
+# No pruning, deliberately. A record whose .blend is gone is inert: a missing
+# path never turns up in the library walk, so it can never cause a skip, and it
+# costs ~80 bytes. Dropping such records would mean deciding "gone" from a single
+# os.path.exists, and asset libraries commonly live on drives that are simply not
+# mounted right now — one save while the drive is offline would wipe the whole
+# index and force a full rescan. Inert entries are the cheaper mistake.
