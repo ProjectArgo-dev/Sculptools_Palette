@@ -2,6 +2,29 @@
 
 All notable changes to **Sculptools: Palette** are listed here, newest first.
 
+## 1.2.2 — 2026-08-26
+
+### Fixed
+
+- **Startup gets faster every launch after the first.** The add-on now remembers which
+  file each of your brushes lives in, and which files hold no brushes at all, so it goes
+  straight to the few that matter instead of walking your Asset Libraries again. The
+  first launch after updating still does the full pass — that is the one that builds the
+  index — and the difference shows from the second onwards. The larger your libraries,
+  the larger the saving. Reported in issue #3.
+- **A brush no longer goes missing when you reorganise your Asset Library.** Moving or
+  renaming the folder a brush lives in, or moving the brush to another `.blend`, could
+  leave its slot showing *not found* for good. The add-on now falls back to a full search
+  and relearns where the brush went.
+- **A palette hotkey bound to a number key now works.** With Quick Numbers on, binding
+  Open or Cycle Palette to a plain number did nothing: the key selected that slot
+  instead. The hotkey you set now wins, and a note under the field points out that the
+  number is no longer available to Quick Numbers — adding a modifier keeps both.
+- **Hotkeys are shown the way they are printed on the key.** A palette opened with the
+  number 6 read *"Six to open Palette"*; the backtick key read *"Accent Grave"*.
+- **Backward palette cycling follows the cycle key.** After rebinding the cycle key,
+  Shift + the *previous* key could keep cycling backwards until you next opened the wheel.
+
 ## 1.2.1 — 2026-08-24
 
 ### Fixed
