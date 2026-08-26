@@ -50,17 +50,52 @@ NEW_SUB_COLOUR  = (0.7372549, 0.7372549, 0.7372549)     # #BCBCBC
 DEFAULT_SLOT_COLOUR = (0.5921569, 0.9058824, 1.0)        # #97E7FF
 DEFAULT_SUB_COLOUR  = (0.3882353, 0.9215686, 0.9215686)  # #63EBEB
 
+# Labels we deliberately choose ourselves. Everything else defers to Blender's
+# own name for the key (see _blender_key_name), which is already what the user
+# reads in Preferences > Keymap — so the wheel hint and the place they bound
+# the key agree. The digits are listed here too, so the label stays right even
+# when that enum cannot be reached (headless, stubbed tests).
+# NB the number-row keys are ZERO..NINE in Blender, which is why title-casing
+# the identifier used to render "6" as "Six" while NUMPAD_6 rendered as
+# "Numpad 6" — the same digit, spelled two ways.
 _KEY_LABELS = {
-    'BACK_SLASH': '\\', 'GRAVE': '`', 'TAB': 'Tab', 'SPACE': 'Space',
+    'BACK_SLASH': '\\', 'ACCENT_GRAVE': '`', 'TAB': 'Tab', 'SPACE': 'Space',
     'PAGE_UP': 'Page Up', 'PAGE_DOWN': 'Page Down',
     'LEFT_BRACKET': '[', 'RIGHT_BRACKET': ']',
+    'ZERO': '0', 'ONE': '1', 'TWO': '2', 'THREE': '3', 'FOUR': '4',
+    'FIVE': '5', 'SIX': '6', 'SEVEN': '7', 'EIGHT': '8', 'NINE': '9',
 }
+
+# Memoised: the centre hints are rebuilt on EVERY frame of the wheel draw
+# (modal._draw_cb), so this RNA lookup must happen once per key, not per frame.
+_KEY_NAME_CACHE = {}
+
+
+def _blender_key_name(key_type):
+    """Blender's own label for an event type — 'SIX' -> '6', 'MINUS' -> '-'.
+    None when it cannot be resolved (unknown identifier, or no RNA available)."""
+    if key_type in _KEY_NAME_CACHE:
+        return _KEY_NAME_CACHE[key_type]
+    name = None
+    try:
+        prop = bpy.types.KeyMapItem.bl_rna.properties["type"]
+        item = prop.enum_items.get(key_type)
+        if item is not None:
+            name = item.name or None
+    except Exception:
+        name = None
+    _KEY_NAME_CACHE[key_type] = name
+    return name
 
 
 def key_label(key_type):
-    """Symbol/label shown in the centre hints for an event.type."""
+    """Symbol/label shown in the centre hints for an event.type. Shows the
+    key as it is printed on the keycap wherever there is one."""
     if key_type in _KEY_LABELS:
         return _KEY_LABELS[key_type]
+    name = _blender_key_name(key_type)
+    if name:
+        return name
     if len(key_type) == 1:
         return key_type
     return key_type.replace('_', ' ').title()
