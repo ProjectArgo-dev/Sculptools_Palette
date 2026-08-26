@@ -18,7 +18,8 @@ from bpy.types import Operator
 from bpy.props import IntProperty
 
 from .prefs import (get_prefs, get_num_slots, get_slot, get_sub,
-                    NUM_SUBSLOTS, SUB_CYCLE_ORDER)
+                    NUM_SUBSLOTS, SUB_CYCLE_ORDER,
+                    get_open_key_binding, get_cycle_key_binding, keys_conflict)
 from .tools import is_oneshot
 
 QUICK_NUMBER_WINDOW = 0.6   # seconds within which a same-key repeat keeps cycling
@@ -46,6 +47,21 @@ def _slot_group(main, sub0, sub1, sub2):
     return [n for n in ordered if n and not is_oneshot(n)]
 
 
+def quick_number_slot(binding):
+    """0-based slot a chord would take away from Quick Numbers, or None when it
+    takes nothing. Quick Numbers only ever claims BARE number keys, so any
+    modifier at all keeps the two apart — which is why binding a palette hotkey
+    to Alt+2 costs nothing, while plain 2 costs that one slot."""
+    if not binding:
+        return None
+    try:
+        if any(binding[1:5]):
+            return None
+        return _QN_KEYS.index(binding[0])
+    except (ValueError, TypeError, IndexError):
+        return None
+
+
 def _cycle_index(same_key, last_index, group_len):
     """Next position in a slot's group: advance when the same key was pressed
     within the window (`same_key`), otherwise restart at the main brush (0)."""
@@ -70,6 +86,18 @@ class SCULPTOOLS_OT_quick_number(Operator):
     def invoke(self, context, event):
         prefs = get_prefs(context)
         if not getattr(prefs, 'quick_numbers_enabled', True):
+            return {'PASS_THROUGH'}
+
+        # The user bound Open/Cycle to this very key. Their explicit hotkey wins:
+        # yield the key instead of swallowing it, so the hotkey they set actually
+        # fires. Decided HERE, at runtime, rather than by deactivating our keymap
+        # item — same reason the backward-cycle holder decides in its invoke: a
+        # kmi flag depends on sync timing, and mutating keymaps has its own traps.
+        # It also makes us independent of keymap ORDER, which is what decides the
+        # winner otherwise and is not something we control.
+        here = (event.type, event.ctrl, event.alt, event.shift, event.oskey)
+        if (keys_conflict(here, get_open_key_binding(context)) or
+                keys_conflict(here, get_cycle_key_binding(context))):
             return {'PASS_THROUGH'}
 
         slot = self.slot_index

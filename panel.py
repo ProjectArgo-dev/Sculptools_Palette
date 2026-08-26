@@ -9,8 +9,9 @@
 import bpy
 from bpy.types import Panel, Operator
 
-from .prefs import (get_prefs, get_slot, get_sub, get_num_slots, NUM_SUBSLOTS,
+from .prefs import (get_prefs, key_label, get_slot, get_sub, get_num_slots, NUM_SUBSLOTS,
                     get_active_palette, ensure_palettes, can_delete)
+from .quick_numbers import quick_number_slot
 from .gpu_draw import (draw_palette, clear_texture_cache, diagnose_brush_preview,
                        request_preview_by_name, _effective_layout)
 
@@ -215,6 +216,26 @@ def note_hotkey_panel_drawn():
     _HOTKEY_PANEL_SEEN['t'] = time.time()
 
 
+def _hotkey_watch_idle():
+    """Runs once the hotkey panel has not been drawn for _HOTKEY_PANEL_IDLE_S.
+
+    The backward-cycle keymap item is DERIVED from the forward cycle key, so it
+    has to be re-synced whenever the user rebinds that key. The sync cannot live
+    in the panel draw — mutating a keymap item there cancels the native capture
+    widget mid-"Press a key" (lesson 2026-07-10) — and the remaining triggers
+    (deferred register, wheel invoke, toggle preview) all miss the case of
+    rebinding the key and never opening the wheel, which left the backward cycle
+    answering to the OLD key. Here is the safe moment: the panel has not been
+    drawn for seconds, so no capture can be in progress (a live capture redraws
+    continuously, which keeps this branch from firing at all).
+    """
+    try:
+        from .prefs import sync_cycle_back_binding
+        sync_cycle_back_binding(bpy.context)
+    except Exception:
+        pass
+
+
 def start_hotkey_mirror_watch():
     """Arm the poll that mirrors the two hotkey keymap items into the preferences.
     Idempotent (a second call while already watching is a no-op); the tick
@@ -232,6 +253,7 @@ def start_hotkey_mirror_watch():
             return None
         if (time.time() - _HOTKEY_PANEL_SEEN['t']) > _HOTKEY_PANEL_IDLE_S:
             _hotkey_watch_active = False
+            _hotkey_watch_idle()
             return None                  # panel gone — stop polling
         try:
             from .prefs import capture_live_bindings
@@ -296,14 +318,15 @@ def wrap_text_to_width(text, max_px, measure):
     return lines
 
 
-def _warn_text_lines(context):
-    """The autosave warning, broken to fit the sidebar as it is right now.
+def _fit_lines(context, text, fallback):
+    """*text* broken to fit the sidebar as it is right now.
 
     Measures the actual widget font: blf is already a dependency (gpu_draw draws
     the slot labels with it) and it always sets its own size before measuring, so
     changing the size of font 0 here cannot disturb anything else. Any failure —
-    no region, no styles, blf unavailable — degrades to the short pre-broken
-    lines rather than risking clipped prose.
+    no region, no styles, blf unavailable — degrades to *fallback* rather than
+    risking clipped prose, because label() truncates mid-string instead of
+    wrapping.
     """
     try:
         import blf
@@ -313,12 +336,41 @@ def _warn_text_lines(context):
         avail = (float(context.region.width)
                  - (_WARN_CHROME_PX + _WARN_ICON_PX + _WARN_SAFETY_PX) * scale)
         if avail <= 0:
-            return list(_AUTOSAVE_WARN_LINES)
-        lines = wrap_text_to_width(_AUTOSAVE_WARN_TEXT, avail,
+            return list(fallback)
+        lines = wrap_text_to_width(text, avail,
                                   lambda s: blf.dimensions(0, s)[0])
-        return lines or list(_AUTOSAVE_WARN_LINES)
+        return lines or list(fallback)
     except Exception:
-        return list(_AUTOSAVE_WARN_LINES)
+        return list(fallback)
+
+
+def _warn_text_lines(context):
+    """The autosave warning, wrapped to the current sidebar width."""
+    return _fit_lines(context, _AUTOSAVE_WARN_TEXT, _AUTOSAVE_WARN_LINES)
+
+
+def _quick_number_note(binding, quick_numbers_enabled):
+    """The sentence shown under a hotkey box when it has taken a number away from
+    Quick Numbers, or None."""
+    slot = quick_number_taken_slot(binding, quick_numbers_enabled)
+    if slot is None:
+        return None
+    del slot                      # the key itself is what the user needs to read
+    # Kept SHORT on purpose: measured against the real widget font, this wraps to
+    # 3 lines in a 220px sidebar. The earlier, fuller sentence took 6 — a wall of
+    # text under a one-line field. Budget pinned by test_quick_number_hotkey_note.
+    return ("Quick Numbers no longer uses %s. Add a modifier to keep both."
+            % key_label(binding[0]))
+
+
+def quick_number_taken_slot(binding, quick_numbers_enabled):
+    """1-based slot Quick Numbers gives up because a palette hotkey is bound to
+    its bare number, or None when nothing is given up — which is the common case:
+    Quick Numbers claims only bare numbers, so any modifier keeps both working."""
+    if not quick_numbers_enabled:
+        return None
+    idx = quick_number_slot(binding)
+    return None if idx is None else idx + 1
 
 
 def prefs_autosave_off(context):
@@ -747,10 +799,12 @@ class SCULPTOOLS_PT_palette_utils(Panel):
         return context.mode == 'SCULPT'
 
     @staticmethod
-    def _draw_hotkey_box(layout, context, title, kmi_idname, conflict_msg, conflict):
+    def _draw_hotkey_box(layout, context, title, kmi_idname, conflict_msg, conflict,
+                         note=None):
         """A box with the native keymap widget (full_event) for the keymap item
-        `kmi_idname`, plus the conflict message below it when needed. Used for both
-        Open and Cycle (both keymap items)."""
+        `kmi_idname`, plus the conflict message below it when needed, and an
+        optional wrapped info note. Used for both Open and Cycle (both keymap
+        items)."""
         box = layout.box()
         box.label(text=title, icon="KEYINGSET")
         col = box.column()
@@ -771,6 +825,11 @@ class SCULPTOOLS_PT_palette_utils(Panel):
             col.label(text="Hotkey editor unavailable here", icon="ERROR")
         if conflict:
             col.label(text=conflict_msg, icon="ERROR")
+        if note:
+            # Wrapped, not a single label(): label() truncates mid-string, which
+            # would hide the very thing the note explains.
+            for i, line in enumerate(_fit_lines(context, note, (note,))):
+                col.label(text=line, icon="INFO" if i == 0 else "BLANK1")
 
     def draw(self, context):
         from .prefs import (get_open_key_binding, get_cycle_key_binding,
@@ -794,12 +853,23 @@ class SCULPTOOLS_PT_palette_utils(Panel):
         open_b   = get_open_key_binding(context)
         conflict = keys_conflict(cycle_b, open_b)
 
+        # Binding a hotkey to a BARE number collides with Quick Numbers, which
+        # claims 1..9/0 in Sculpt Mode. The hotkey wins (quick_numbers yields the
+        # key at runtime), so the note says what that costs and how to avoid it —
+        # rather than telling the user to switch a whole feature off to regain
+        # one key.
+        qn_on = bool(getattr(get_prefs(context), "quick_numbers_enabled", True))
+        open_note = _quick_number_note(open_b, qn_on)
+        cycle_note = _quick_number_note(cycle_b, qn_on)
+
         self._draw_hotkey_box(layout, context, "Open Palette Hotkey",
                               "sculptools.radial_palette",
-                              "Conflicts with Cycle Palette hotkey", conflict)
+                              "Conflicts with Cycle Palette hotkey", conflict,
+                              note=open_note)
         self._draw_hotkey_box(layout, context, "Cycle Palette Hotkey",
                               "sculptools.cycle_palette_holder",
-                              "Conflicts with Open Palette hotkey", conflict)
+                              "Conflicts with Open Palette hotkey", conflict,
+                              note=cycle_note)
 
         # BACKWARD palette cycle: an info line clarifies the usage and the edge
         # case (backward unavailable if the key already uses Shift). NB: the sync of
