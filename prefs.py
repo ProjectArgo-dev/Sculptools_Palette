@@ -55,6 +55,10 @@ DEFAULT_SUB_COLOUR  = (0.3882353, 0.9215686, 0.9215686)  # #63EBEB
 # reads in Preferences > Keymap — so the wheel hint and the place they bound
 # the key agree. The digits are listed here too, so the label stays right even
 # when that enum cannot be reached (headless, stubbed tests).
+# QUOTE is an override on purpose: Blender labels it '"', the SHIFTED glyph,
+# while it labels every other punctuation key with the unshifted one (';' not
+# ':', '-' not '_', '=' not '+'). Verified on 4.5.13 and 5.2.0 — showing "'"
+# makes the set consistent with itself.
 # NB the number-row keys are ZERO..NINE in Blender, which is why title-casing
 # the identifier used to render "6" as "Six" while NUMPAD_6 rendered as
 # "Numpad 6" — the same digit, spelled two ways.
@@ -62,6 +66,7 @@ _KEY_LABELS = {
     'BACK_SLASH': '\\', 'ACCENT_GRAVE': '`', 'TAB': 'Tab', 'SPACE': 'Space',
     'PAGE_UP': 'Page Up', 'PAGE_DOWN': 'Page Down',
     'LEFT_BRACKET': '[', 'RIGHT_BRACKET': ']',
+    'QUOTE': "'",
     'ZERO': '0', 'ONE': '1', 'TWO': '2', 'THREE': '3', 'FOUR': '4',
     'FIVE': '5', 'SIX': '6', 'SEVEN': '7', 'EIGHT': '8', 'NINE': '9',
 }
