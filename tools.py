@@ -114,6 +114,25 @@ def key_for_tool_target(idname):
     return _BY_TARGET.get(idname)
 
 
+# The brush tools at the top of the Sculpt toolbar. These are NOT catalogue
+# tools: each stands for a brush TYPE (builtin_brush.paint -> PAINT, and so on),
+# and the brush behind one is whatever is active in the header — so they get the
+# asset shelf's "Add brush to Palette" instead. Matched by shape rather than by a
+# fixed list, so a brush type added by a future Blender is covered on its own;
+# test_brush_tools_offer_add_brush pins that no catalogue target can also match,
+# which is what keeps the toolbar menu unambiguous.
+BRUSH_TOOL_TARGET = "builtin.brush"
+BRUSH_TOOL_PREFIX = "builtin_brush."
+
+
+def is_brush_tool_target(idname):
+    """True for a Sculpt toolbar button that selects a brush rather than a tool.
+    Pure (no bpy)."""
+    if not isinstance(idname, str):
+        return False
+    return idname == BRUSH_TOOL_TARGET or idname.startswith(BRUSH_TOOL_PREFIX)
+
+
 def is_tool_spec(spec):
     """True iff a slot string is a tool spec ('tool:<key>')."""
     return isinstance(spec, str) and spec.startswith(TOOL_PREFIX)

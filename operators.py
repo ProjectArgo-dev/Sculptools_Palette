@@ -243,8 +243,18 @@ def toolbar_tool_context_menu(self, context):
     op = getattr(context, "button_operator", None)
     if op is None or op.bl_rna.identifier != "WM_OT_tool_set_by_id":
         return
-    from .tools import get_tool, tool_available, key_for_tool_target
+    from .tools import (get_tool, tool_available, key_for_tool_target,
+                        is_brush_tool_target)
     idname = getattr(op, "name", "")
+    if is_brush_tool_target(idname):
+        # A brush tool, not a catalogue tool. What it would add is simply the
+        # active brush shown in the header, which is exactly what the asset
+        # shelf's entry already assigns — so offer the very same operator rather
+        # than a second one that would have to re-derive the same brush.
+        self.layout.separator()
+        self.layout.operator("sculptools.shelf_add_to_palette",
+                             text="Add brush to Palette", icon="BRUSHES_ALL")
+        return
     key = key_for_tool_target(idname)
     if not key:
         return
