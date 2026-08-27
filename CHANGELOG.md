@@ -2,8 +2,7 @@
 
 All notable changes to **Sculptools: Palette** are listed here, newest first.
 
-## 1.2.2 — 2026-08-27
-
+## 1.2.2
 ### Added
 
 - **"Add brush to Palette" now works from the toolbar as well.** Right-clicking one of
@@ -32,8 +31,7 @@ All notable changes to **Sculptools: Palette** are listed here, newest first.
 - **Backward palette cycling follows the cycle key.** After rebinding the cycle key,
   Shift + the *previous* key could keep cycling backwards until you next opened the wheel.
 
-## 1.2.1 — 2026-08-24
-
+## 1.2.1
 ### Fixed
 
 - **Entering Sculpt Mode for the first time no longer freezes Blender.** The add-on
@@ -46,8 +44,7 @@ All notable changes to **Sculptools: Palette** are listed here, newest first.
   could not be found used to send the add-on through every `.blend` file in every
   configured library in a single uninterruptible pass.
 
-## 1.2.0 — 2026-08-08
-
+## 1.2.0
 ### Added
 
 - **Fixed Sub-Slot Visibility**, a new toggle in *Palette Appearance* (off by default).
@@ -60,8 +57,7 @@ All notable changes to **Sculptools: Palette** are listed here, newest first.
 - The inner edge of slot thumbnails is smoother: the circular fade ended a fraction too
   far out, which left a faintly ragged rim that shifted around the circle.
 
-## 1.1.0 — 2026-07-30
-
+## 1.1.0
 ### Added
 
 - **Custom hotkeys now survive a restart.** The Open Palette and Cycle Palette keys you
@@ -100,8 +96,7 @@ All notable changes to **Sculptools: Palette** are listed here, newest first.
 - Reloading the add-on in the middle of a right-click drag left a stale slider overlay
   behind.
 
-## 1.0.0 — 2026-07-23
-
+## 1.0.0
 First release on the Blender Extensions Platform: the radial palette for sculpt brushes
 and tools, up to 8 palettes of 10 slots × 3 sub-slots, Quick Numbers, Jump-to, Dynamic
 Brush Sliders, real Asset-library thumbnails, a live Preview Editor, and preset
