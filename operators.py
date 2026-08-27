@@ -215,6 +215,71 @@ def brush_context_menu(self, context):
 # only when the clicked tool is one of ours, then reuse the very same slot picker
 # as "Add brush to Palette" by passing the "tool:<key>" spec as brush_name.
 
+def _active_tool_idname(context):
+    """idname of the tool currently active in the 3D View, or "" if unknown."""
+    try:
+        tool = context.workspace.tools.from_space_view3d_mode(context.mode,
+                                                              create=False)
+        return getattr(tool, "idname", "") or ""
+    except Exception:
+        return ""
+
+
+class SCULPTOOLS_OT_toolbar_add_brush(Operator):
+    bl_idname   = "sculptools.toolbar_add_brush_to_palette"
+    bl_label    = "Add brush to Palette"
+    bl_description = "Assign this brush tool's brush to a slot in the active palette"
+    bl_options  = {'REGISTER'}
+
+    # Captured at draw time, like SCULPTOOLS_OT_toolbar_add: execute() must not
+    # depend on the button context still being live.
+    tool_idname: StringProperty()  # type: ignore
+
+    def execute(self, context):
+        sculpt = getattr(context.tool_settings, "sculpt", None)
+        if sculpt is None:
+            self.report({'WARNING'}, "No sculpt settings")
+            return {'CANCELLED'}
+
+        # A brush tool stands for a brush TYPE, not for a brush, and Blender does
+        # not expose the brush it remembers for a type: there is no tool_slots any
+        # more, the workspace keeps only the ACTIVE tool, and bpy.data.brushes
+        # holds just what has been used (on 5.2.1 DRAW_FACE_SETS had none at all,
+        # its brush living only in the Essentials library). So reading the tool's
+        # brush means asking Blender to make that tool current — done ONLY when it
+        # is not already the active one, which keeps the usual flow (click the
+        # tool, then right-click it) completely free of side effects.
+        previous = _active_tool_idname(context)
+        borrowed = bool(self.tool_idname) and previous != self.tool_idname
+        if borrowed:
+            try:
+                bpy.ops.wm.tool_set_by_id(name=self.tool_idname)
+            except Exception as exc:
+                self.report({'WARNING'},
+                            f"Sculptools: could not select that tool: {exc}")
+                return {'CANCELLED'}
+
+        brush = sculpt.brush
+        name = getattr(brush, "name", "") if brush else ""
+
+        # Put the tool back: a right-click must not change what the user is
+        # holding. Verified on 5.2.1 that the round trip restores both the tool
+        # and its brush. A failure here is reported but never swallows the
+        # assignment — the name is already captured.
+        if borrowed and previous:
+            try:
+                bpy.ops.wm.tool_set_by_id(name=previous)
+            except Exception as exc:
+                self.report({'WARNING'},
+                            f"Sculptools: could not restore the previous tool: {exc}")
+
+        if not name:
+            self.report({'WARNING'}, "No active brush")
+            return {'CANCELLED'}
+        bpy.ops.sculptools.assign_to_slot('INVOKE_DEFAULT', brush_name=name)
+        return {'FINISHED'}
+
+
 class SCULPTOOLS_OT_toolbar_add(Operator):
     bl_idname   = "sculptools.toolbar_add_tool_to_palette"
     bl_label    = "Add Tool to Palette"
@@ -247,13 +312,13 @@ def toolbar_tool_context_menu(self, context):
                         is_brush_tool_target)
     idname = getattr(op, "name", "")
     if is_brush_tool_target(idname):
-        # A brush tool, not a catalogue tool. What it would add is simply the
-        # active brush shown in the header, which is exactly what the asset
-        # shelf's entry already assigns — so offer the very same operator rather
-        # than a second one that would have to re-derive the same brush.
+        # A brush tool, not a catalogue tool: it stands for a brush TYPE, and the
+        # brush to add is the one that tool would make current — see
+        # SCULPTOOLS_OT_toolbar_add_brush for why that cannot simply be read.
         self.layout.separator()
-        self.layout.operator("sculptools.shelf_add_to_palette",
-                             text="Add brush to Palette", icon="BRUSHES_ALL")
+        add = self.layout.operator("sculptools.toolbar_add_brush_to_palette",
+                                   text="Add brush to Palette", icon="BRUSHES_ALL")
+        add.tool_idname = idname
         return
     key = key_for_tool_target(idname)
     if not key:
@@ -1109,6 +1174,7 @@ all_operator_classes = [
     SCULPTOOLS_OT_confirm_assign,
     SCULPTOOLS_OT_clear_slot,
     SCULPTOOLS_OT_shelf_add,
+    SCULPTOOLS_OT_toolbar_add_brush,
     SCULPTOOLS_OT_toolbar_add,
     SCULPTOOLS_MT_slot_actions_main,
     SCULPTOOLS_MT_slot_actions_sub0,
