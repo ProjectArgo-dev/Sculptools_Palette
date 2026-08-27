@@ -2,7 +2,14 @@
 
 All notable changes to **Sculptools: Palette** are listed here, newest first.
 
-## 1.2.2 — 2026-08-26
+## 1.2.2 — 2026-08-27
+
+### Added
+
+- **"Add brush to Palette" now works from the toolbar as well.** Right-clicking one of
+  the brush buttons at the top of the Sculpt toolbar offers the same entry as the asset
+  shelf, and adds the brush that button stands for — Mask, Face Set Paint, and so on.
+  Your active tool is left as you had it.
 
 ### Fixed
 
