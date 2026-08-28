@@ -6,7 +6,7 @@ name = "Sculptools: Palette"
 tagline = "Radial palette for sculpt brushes and tools"
 maintainer = "ProjectArgo"
 type = "add-on"
-website = "https://extensions.blender.org/add-ons/sculptools-palette/"
+website = "https://github.com/ProjectArgo-dev/Sculptools_Palette"
 
 tags = ["Sculpt", "User Interface", "3D View"]
 
