@@ -2,9 +2,13 @@
 
 All notable changes to **Sculptools: Palette** are listed here, newest first.
 
-## 1.2.2
+## 1.3.0
 ### Added
 
+- **Show Wordmark**, a new toggle in *Palette Appearance* (on by default). Turning it
+  off hides the PA\ETTE lettering at the centre of the wheel: the palette counter, name,
+  hints and gear then close up and re-centre, leaving the middle of the wheel clearer.
+  Left on, the wheel looks exactly as it did before.
 - **"Add brush to Palette" now works from the toolbar as well.** Right-clicking one of
   the brush buttons at the top of the Sculpt toolbar offers the same entry as the asset
   shelf, and adds the brush that button stands for — Mask, Face Set Paint, and so on.
