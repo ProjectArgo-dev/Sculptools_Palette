@@ -6,7 +6,7 @@ import bpy
 from bpy.types import Operator
 
 from .gpu_draw import (draw_palette, _slot_angle, _sub_positions, _effective_layout,
-                       GEAR_CENTER_DY, GEAR_RADIUS)
+                       center_layout, GEAR_RADIUS)
 from .prefs import (get_prefs, get_slot, get_sub, get_num_slots, NUM_SUBSLOTS,
                     get_active_palette, ensure_palettes, key_label, wrap_index,
                     request_prefs_save, get_cycle_key_binding, get_open_key_binding,
@@ -268,6 +268,10 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         self._glow_intensity  = prefs.glow_intensity
         self._glow_falloff    = prefs.glow_falloff
         self._fixed_slot_outline = prefs.fixed_slot_outline
+        # Universal like the two above, and snapshotted for the same reason —
+        # plus it moves the gear, so draw and _hit_gear must agree for the
+        # whole time the wheel is open.
+        self._show_wordmark = prefs.show_wordmark
 
         # Remember which key opened the wheel so "press the same key again to
         # close" works with any binding the user chooses (default is now '\',
@@ -409,6 +413,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             'glow_intensity':   self._glow_intensity,
             'glow_falloff':     self._glow_falloff,
             'fixed_slot_outline': self._fixed_slot_outline,
+            'show_wordmark':      self._show_wordmark,
             'palette_index':  pal_index,
             'palette_total':  pal_total,
             'palette_name':   pit.name,
@@ -485,7 +490,9 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         return None
 
     def _hit_gear(self, mx, my):
-        gx, gy = self._cx, self._cy - GEAR_CENTER_DY
+        # Same offset the draw uses: hiding the wordmark lifts the gear.
+        dy = center_layout(self._show_wordmark, False)['icon']
+        gx, gy = self._cx, self._cy + dy
         return _dist(mx, my, gx, gy) <= (GEAR_RADIUS + 6)
 
     def _hit_sub(self, mx, my):

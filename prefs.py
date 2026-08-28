@@ -607,6 +607,16 @@ class SculptoolsPreferences(AddonPreferences):
                     "palette is. Flick selection still reaches main slots "
                     "only, never sub-slots",
         update=_preview_redraw) # type: ignore
+    # Show Wordmark: the add-on's name at the centre of the wheel. Purely
+    # cosmetic, so it lives in _APPEARANCE_PROPS. Default ON = the wheel as it
+    # has always looked; turning it off closes up the rest of the central
+    # block and re-centres it (see gpu_draw._CENTER_LAYOUT).
+    show_wordmark: BoolProperty(
+        name="Show Wordmark", default=True,
+        description="Show the PA\\ETTE wordmark at the centre of the wheel. When "
+                    "off, the palette counter, name, hints and gear close up "
+                    "and re-centre",
+        update=_preview_redraw) # type: ignore
 
     # Quick Numbers: number keys select/cycle slot brushes without the wheel
     quick_numbers_enabled: BoolProperty(

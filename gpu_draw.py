@@ -666,11 +666,38 @@ def _build_texture(w, h, raw):
 
 _TOOL_ICON_BG = (0.16, 0.16, 0.18)   # dark disc behind the white glyph
 
-GEAR_CENTER_DY = 84   # px below the centre where the gear sits (modal: 2 hint lines)
-# The Preview Editor shows a single hint line ("Preview Only", at cy-33) instead of
-# the modal's two, so the eye icon has a SMALLER offset to stay compact with the
-# rest of the central block (tuned by eye in Blender).
-EYE_CENTER_DY = 60
+# Vertical offsets of every line of the central block, in px ABOVE the wheel
+# centre (negative = below). A text offset is the line's CENTRE, because that is
+# how _draw_text_centered reads its y; the icon offset is the centre of the
+# gear/eye glyph and is read by modal._hit_gear too, so what is drawn and what
+# is clickable cannot drift apart.
+#
+# One entry per (wordmark shown, Preview Editor) combination. The numbers for
+# a visible wordmark are the ones that have always shipped and are deliberately
+# untouched, so leaving it on gives exactly the wheel that existed before this
+# option.
+# Hiding the wordmark removes the block's tallest line, so the survivors are not
+# merely shifted down: the top group (counter, name) and the bottom group
+# (hints, icon) close up, and the shorter block is re-centred on the wheel.
+# The Preview Editor has its own pair because its block is shorter — one hint
+# line instead of two, and a bare eye with no button ring around it.
+_CENTER_LAYOUT = {
+    (True,  False): {'counter': 68, 'name': 46, 'wordmark':   10,
+                     'hints': (-26, -41), 'icon': -84},
+    (True,  True):  {'counter': 68, 'name': 46, 'wordmark':   10,
+                     'hints': (-33,),     'icon': -60},
+    (False, False): {'counter': 59, 'name': 37, 'wordmark': None,
+                     'hints': (11, -4),   'icon': -47},
+    (False, True):  {'counter': 42, 'name': 20, 'wordmark': None,
+                     'hints': (-6,),      'icon': -33},
+}
+
+
+def center_layout(show_wordmark, is_preview):
+    """Offsets for one variant of the central block (see _CENTER_LAYOUT). The
+    single source shared by the draw and by the gear hit-test in modal.py."""
+    return _CENTER_LAYOUT[(bool(show_wordmark), bool(is_preview))]
+
 GEAR_RADIUS    = 14   # gear draw radius (px)
 # Ring around the gear so it reads as a pressable button (user request v2.7.0).
 # Only the modal's gear (clickable) — NOT the Preview Editor's eye, which is
@@ -834,9 +861,10 @@ def _draw_textured_quad(cx, cy, r, tex, colour, alpha=1.0):
 
 
 def _draw_center(state):
-    """Central block: n/N counter, palette name, wordmark, two hint lines, gear
+    """Central block: n/N counter, palette name, wordmark, hint line(s), gear
     (tinted with the active palette's slot colour on hover). Reaffirms ALPHA before
-    each text/icon (golden rule #5)."""
+    each text/icon (golden rule #5). The wordmark is optional; without it
+    the block closes up and re-centres — see _CENTER_LAYOUT."""
     cx = state['cx']; cy = state['cy']
     a = state.get('alpha', 1.0)
     idx = state.get('palette_index', 1)
@@ -847,21 +875,26 @@ def _draw_center(state):
     gear_hov = state.get('gear_hovered', False)
     gear_col = state.get('gear_colour', (0.8, 0.8, 0.8))
     is_preview = state.get('is_preview', False)
+    show_wordmark = state.get('show_wordmark', True)
+    lay = center_layout(show_wordmark, is_preview)
 
     gpu.state.blend_set('ALPHA')
     txt = (*C_TEXT[:3], a)
     hint = (*C_TEXT[:3], a * 0.8)
-    # Wordmark enlarged by 50% (30 -> 45); name and hints moved closer to the
-    # wordmark to halve the empty space (offsets tuned by eye in Blender).
-    _draw_text_centered(f"{idx}/{tot}", cx, cy + 68, 13, txt)
+    _draw_text_centered(f"{idx}/{tot}", cx, cy + lay['counter'], 13, txt)
     if name:
-        _draw_text_centered(name, cx, cy + 46, 15, txt)
-    _draw_text_centered("PA\\ETTE", cx, cy + 10, 45, txt)
+        _draw_text_centered(name, cx, cy + lay['name'], 15, txt)
+    if lay['wordmark'] is not None:
+        # Wordmark enlarged by 50% (30 -> 45); name and hints sit close to it to
+        # halve the empty space (offsets tuned by eye in Blender).
+        _draw_text_centered("PA\\ETTE", cx, cy + lay['wordmark'], 45, txt)
     if is_preview:
-        _draw_text_centered("Preview Only", cx, cy - 33, 11, hint)
+        _draw_text_centered("Preview Only", cx, cy + lay['hints'][0], 11, hint)
     else:
-        _draw_text_centered(f"{okl} to open Palette", cx, cy - 26, 11, hint)
-        _draw_text_centered(f"{ckl} to cycle through Palettes", cx, cy - 41, 11, hint)
+        _draw_text_centered(f"{okl} to open Palette",
+                            cx, cy + lay['hints'][0], 11, hint)
+        _draw_text_centered(f"{ckl} to cycle through Palettes",
+                            cx, cy + lay['hints'][1], 11, hint)
 
     icon_name = 'eye' if is_preview else 'gear'
     tex = _get_icon_texture(icon_name)
@@ -871,8 +904,7 @@ def _draw_center(state):
         else:
             col = gear_col if gear_hov else (0.8, 0.8, 0.8)
         gpu.state.blend_set('ALPHA')
-        dy = EYE_CENTER_DY if is_preview else GEAR_CENTER_DY
-        gy = cy - dy
+        gy = cy + lay['icon']
         # Button ring around the gear (not around the preview's eye): same
         # tint/alpha as the glyph so it reads as a single button.
         if not is_preview:

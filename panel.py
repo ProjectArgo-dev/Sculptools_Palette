@@ -74,6 +74,7 @@ def _draw_preview_cb():
         'glow_intensity':   prefs.glow_intensity,
         'glow_falloff':     prefs.glow_falloff,
         'fixed_slot_outline': prefs.fixed_slot_outline,
+        'show_wordmark':        prefs.show_wordmark,
         # Settings preview: show the glow on every slot/sub-slot so the user can
         # judge the gradient params across the whole wheel, not just on hover.
         'glow_all':         True,
@@ -410,7 +411,7 @@ _APPEARANCE_PROPS = [
     "glow_size", "glow_intensity", "glow_falloff",
     "sub_size_factor", "sub_separation",
     "subslot_outline_width",
-    "fixed_slot_outline",
+    "fixed_slot_outline", "show_wordmark",
 ]
 
 # UNIVERSAL interaction settings. Also global, also carried by preset files — but
@@ -755,6 +756,7 @@ class SCULPTOOLS_PT_palette(Panel):
         # conditional, so anything drawn above it would jump a row whenever
         # Fixed Slot Outline is toggled.
         col.prop(prefs, "fixed_subslot_visibility")
+        col.prop(prefs, "show_wordmark")
         # Gradient Size/Falloff, Sub-slot Size and Sub-slot Distance are NO longer
         # exposed in the panel (user request): they remain active properties with
         # their defaults (1.6 / 2.5 / 0.70 / 55.0) and are still read by
