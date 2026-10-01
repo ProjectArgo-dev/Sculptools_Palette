@@ -310,6 +310,10 @@ def _preview_redraw(self, context):
     preview is off."""
     if not getattr(self, 'show_preview', False):
         return
+    # The preview shows in ONE viewport: the one whose sidebar the user is
+    # tuning it from right now (a 3D view; anything else is ignored).
+    from .panel import note_preview_area
+    note_preview_area(getattr(context, 'area', None))
     wm = getattr(context, 'window_manager', None) or bpy.context.window_manager
     for window in wm.windows:
         for area in window.screen.areas:
@@ -1094,8 +1098,10 @@ def sync_jump_bindings(context):
     """Propagate the MODIFIER chosen in the dropdown (prefs.jump_modifier) to all
     8 real `sculptools.jump_palette` keymap items (fixed number 1..8). Writes only
     when they differ (zero writes at steady state). Called from the dropdown's
-    update, from the panel draw, and deferred from register() (after Blender has
-    reapplied the saved keyconfig customizations)."""
+    update, from "Reset Hotkeys", and deferred from register() (after Blender has
+    reapplied the saved keyconfig customizations). NEVER from a panel draw: the
+    "Palette Utilities" panel hosts the native capture widgets, and mutating a
+    keymap item there cancels a capture in progress."""
     try:
         prefs = get_prefs(context)
         ctrl, alt, shift = jump_modifier_flags(getattr(prefs, 'jump_modifier', 'CTRL'))
@@ -1125,10 +1131,6 @@ def factory_reset_palettes(context):
     prefs.active_palette_index = 0
     request_prefs_save()
     return prefs
-
-
-def get_num_palettes(context):
-    return len(get_prefs(context).palettes)
 
 
 def _redraw_live_preview(context):
@@ -1175,6 +1177,21 @@ def set_sub(context, i, j, name):
     setattr(get_active_palette(context), f"sub_{i}_{j}", name)
     request_prefs_save()
     _redraw_live_preview(context)
+
+
+def read_active_slots(context):
+    """(num_slots, slots, subs) of the active palette, resolving it ONCE.
+
+    For the per-frame readers (the wheel's _refresh_layout, twice a frame, and the
+    Preview Editor's draw). get_slot/get_sub re-resolve the active palette on every
+    call, so reading 8 slots + their subs that way meant 41 resolutions: 169 us
+    against 23 us on Blender 5.2.2. Same values, same order."""
+    pit = get_active_palette(context)
+    n = pit.num_slots
+    slots = [getattr(pit, f"slot_{i}", "") for i in range(n)]
+    subs = [[getattr(pit, f"sub_{i}_{j}", "") for j in range(NUM_SUBSLOTS)]
+            for i in range(n)]
+    return n, slots, subs
 
 
 def collect_assigned_brush_names(palettes):

@@ -2,12 +2,13 @@
 
 import math
 import time
+import traceback
 import bpy
 from bpy.types import Operator
 
 from .gpu_draw import (draw_palette, _slot_angle, _sub_positions, _effective_layout,
-                       center_layout, GEAR_RADIUS)
-from .prefs import (get_prefs, get_slot, get_sub, get_num_slots, NUM_SUBSLOTS,
+                       center_layout, GEAR_RADIUS, draws_here, pointer_of)
+from .prefs import (get_prefs, read_active_slots,
                     get_active_palette, ensure_palettes, key_label, wrap_index,
                     request_prefs_save, get_cycle_key_binding, get_open_key_binding,
                     keys_conflict, key_chord_label, jump_modifier_flags,
@@ -232,14 +233,11 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         gear menu clamps onto a neighbour, and the wheel stays open behind it).
         Deriving both from one call makes the desync structurally impossible."""
         prefs = get_prefs(context)
-        self._num_slots = get_num_slots(context)
+        self._num_slots, self._slots, self._sub_slots = read_active_slots(context)
         self._R, self._sub_separation = _effective_layout(
             prefs.palette_radius, prefs.slot_radius,
             prefs.sub_size_factor, prefs.sub_separation,
             self._num_slots)
-        self._slots = [get_slot(context, i) for i in range(self._num_slots)]
-        self._sub_slots = [[get_sub(context, i, j) for j in range(NUM_SUBSLOTS)]
-                           for i in range(self._num_slots)]
 
     def _slot_name(self, i):
         """Cached name of main slot *i*, or "" when out of range. Belt-and-braces
@@ -261,9 +259,10 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         self._fixed_subs = prefs.fixed_subslot_visibility
         self._slot_outline_w      = prefs.slot_outline_width
         self._sub_outline_w       = prefs.subslot_outline_width
-        self._slot_outline_c      = tuple(prefs.slot_outline_colour)
-        self._sub_outline_c       = tuple(prefs.subslot_outline_colour)
         self._sub_size_factor = prefs.sub_size_factor
+        # The region the wheel lives in: the draw callback paints only there (see
+        # gpu_draw.draws_here), and modal() keeps it current.
+        self._region_ptr = pointer_of(context.region)
         self._glow_size       = prefs.glow_size
         self._glow_intensity  = prefs.glow_intensity
         self._glow_falloff    = prefs.glow_falloff
@@ -323,11 +322,8 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         self._rmb_start_size     = 0
         self._rmb_start_strength = 0.0
 
-        # (slot/sub caches were already filled by _refresh_layout above)
-        pit = get_active_palette(context)
-        self._slot_outline_c = tuple(pit.slot_outline_colour)
-        self._sub_outline_c  = tuple(pit.subslot_outline_colour)
-
+        # (slot/sub caches were already filled by _refresh_layout above; the
+        # outline colours are read live from the active palette by _draw_cb)
         self._draw_handle = bpy.types.SpaceView3D.draw_handler_add(
             self._draw_cb, (context,), 'WINDOW', 'POST_PIXEL')
         self._timer = context.window_manager.event_timer_add(
@@ -359,17 +355,20 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             print(f"Sculptools: could not schedule palette menu: {exc}")
 
     def _reload_active_palette(self, context):
-        pit = get_active_palette(context)
         # num_slots is per-palette: update it BEFORE re-reading the slots, so that
         # switching palette makes the geometry (including the EFFECTIVE anti-overlap
         # values) adapt to its slot count.
         self._refresh_layout(context)   # slot/sub caches included
-        self._slot_outline_c = tuple(pit.slot_outline_colour)
-        self._sub_outline_c  = tuple(pit.subslot_outline_colour)
 
     # ── draw ──────────────────────────────────────────────────────────────────
 
     def _draw_cb(self, context):
+        # Paint only in the region the wheel was opened in. The handler is called
+        # for every 3D-view region: without this the wheel showed up in all four
+        # Quad View quadrants (and in every other viewport) while answering the
+        # mouse in one, at N times the cost per frame.
+        if not draws_here(self._region_ptr):
+            return
         # Always read current prefs so palette reflects changes made by
         # the context menu operators while the modal is still running.
         # num_slots is per-palette → refresh it live so create/switch/delete
@@ -402,9 +401,8 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             'subslot_outline_width': self._sub_outline_w,
             # Read colours LIVE from the active palette every frame (like
             # gear_colour below) so create/duplicate/delete/cycle reflect
-            # immediately — the cached self._slot_outline_c/_sub_outline_c only updated
-            # on open/Tab, leaving new/deleted palettes showing stale colours
-            # until the wheel was reopened.
+            # immediately — a copy cached at open/Tab left new/deleted palettes
+            # showing stale colours until the wheel was reopened.
             'slot_outline_colour':  tuple(pit.slot_outline_colour),
             'subslot_outline_colour': tuple(pit.subslot_outline_colour),
             'sub_size_factor':  self._sub_size_factor,
@@ -433,7 +431,9 @@ class SCULPTOOLS_OT_radial_palette(Operator):
     # ── right-drag brush adjust (Dynamic Sliders inside the wheel) ───────────────
 
     def _rmb_begin(self, context):
-        from .dynamic_sliders import read_brush_size, read_brush_strength
+        from .dynamic_sliders import read_brush_size, read_brush_strength, _overlay
+        # The readout is drawn from inside _draw_cb, so it belongs to this region.
+        _overlay['region'] = self._region_ptr
         self._rmb_down    = True
         self._rmb_dragged = False
         self._rmb_mode    = None
@@ -465,6 +465,20 @@ class SCULPTOOLS_OT_radial_palette(Operator):
     def _rmb_end_overlay(self):
         from .dynamic_sliders import _overlay
         _overlay['active'] = False
+
+    def _rmb_cancel(self, context):
+        """ESC during a right-drag: put back the radius/strength it changed (as
+        the standalone Dynamic Sliders do) and end it, wheel still open. Clearing
+        _rmb_down also turns the right-button release that follows into a no-op,
+        instead of a tap that would open the slot menu or close the wheel."""
+        from .dynamic_sliders import restore_brush_value
+        restore_brush_value(context, self._rmb_mode,
+                            self._rmb_start_size, self._rmb_start_strength)
+        self._rmb_down    = False
+        self._rmb_dragged = False
+        self._rmb_mode    = None
+        self._rmb_end_overlay()
+        context.area.tag_redraw()
 
     def _rmb_tap_action(self, context):
         """Original right-click TAP behaviour: open the slot context menu when
@@ -627,10 +641,35 @@ class SCULPTOOLS_OT_radial_palette(Operator):
     # ── modal ─────────────────────────────────────────────────────────────────
 
     def modal(self, context, event):
+        # An exception escaping modal() makes Blender cancel the operator WITHOUT
+        # running _finish: the draw handler and the event timer stay registered
+        # and the wheel is left painted on screen, frozen, until Blender restarts
+        # (reproduced on 5.2.2 with Ctrl+Space while the wheel was open). Whatever
+        # goes wrong in here, close the wheel cleanly and keep the traceback.
+        try:
+            return self._modal(context, event)
+        except Exception:
+            traceback.print_exc()
+            self._finish(context)
+            return {'CANCELLED'}
+
+    def _modal(self, context, event):
         # Close automatically if the user leaves Sculpt Mode
         if context.mode != 'SCULPT':
             self._finish(context)
             return {'CANCELLED'}
+
+        # The screen changed under the wheel (Ctrl+Space maximise, a workspace
+        # switch): Blender hands the handler back with NO area, and there is no
+        # longer a viewport to draw or hit-test in. Close.
+        if context.area is None:
+            self._finish(context)
+            return {'CANCELLED'}
+        # Blender may also re-map the handler onto a replacement region; follow
+        # it, so the per-region draw filter never hides a wheel that is still live.
+        region = getattr(context, "region", None)
+        if region is not None:
+            self._region_ptr = pointer_of(region)
 
         # Assigning a brush/tool from the slot context menu requests an auto-close:
         # the assign operator ran while the menu was up; now that the modal has
@@ -850,6 +889,17 @@ class SCULPTOOLS_OT_radial_palette(Operator):
             return {'CANCELLED'}
 
         if event.type == 'ESC':
+            if event.value != 'PRESS' or getattr(event, "is_repeat", False):
+                # Only a fresh press acts: the release (or an auto-repeat) after
+                # an ESC that cancelled a right-drag below must not then close
+                # the wheel the user meant to keep.
+                return {'RUNNING_MODAL'}
+            if self._rmb_down:
+                # A right-drag (or a right-click not yet resolved) is the
+                # innermost interaction: ESC cancels THAT, restoring what it
+                # changed, and leaves the wheel open. A second ESC closes it.
+                self._rmb_cancel(context)
+                return {'RUNNING_MODAL'}
             self._finish(context)
             return {'CANCELLED'}
 

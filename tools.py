@@ -180,6 +180,17 @@ def best_tool_label(spec):
     return _key_of(spec) or spec
 
 
+def display_name(spec):
+    """Name to show for a slot value in messages: a tool spec's catalogue
+    display name ('tool:box_mask' -> 'Box Mask'), a brush name unchanged. An
+    unknown tool key falls back to the bare key, never the raw 'tool:' spec.
+    (best_tool_label is the SHORT wheel label — 'Poly Mask' — for tight spaces.)"""
+    if is_tool_spec(spec):
+        entry = get_tool(spec)
+        return entry.display if entry else _key_of(spec)
+    return spec
+
+
 def tool_available(entry, blender_version):
     """True if this tool exists on the given Blender version. Entries with
     min_version=None are always available; otherwise it requires

@@ -19,6 +19,7 @@ import blf
 from bpy.types import Operator
 
 from .prefs import get_prefs
+from .gpu_draw import draws_here, pointer_of
 
 # ── interaction tuning (kept as module constants — easy to expose later) ──────
 DRAG_THRESHOLD = 8.0            # px of travel before the axis locks / slider engages
@@ -88,8 +89,7 @@ def read_brush_strength(context):
     return b.strength if b else 0.0
 
 
-def write_brush_size(context, val):
-    val = int(round(_clamp(val, 1, SIZE_MAX)))
+def _set_brush_size(context, val):
     ts = getattr(context, "tool_settings", None)
     ups = _unified_paint_settings(ts)
     if ups is not None and ups.use_unified_size:
@@ -98,11 +98,9 @@ def write_brush_size(context, val):
         sc = getattr(ts, "sculpt", None)
         if sc and sc.brush:
             sc.brush.size = val
-    return val
 
 
-def write_brush_strength(context, val):
-    val = _clamp(val, 0.0, 1.0)
+def _set_brush_strength(context, val):
     ts = getattr(context, "tool_settings", None)
     ups = _unified_paint_settings(ts)
     if ups is not None and ups.use_unified_strength:
@@ -111,18 +109,44 @@ def write_brush_strength(context, val):
         sc = getattr(ts, "sculpt", None)
         if sc and sc.brush:
             sc.brush.strength = val
+
+
+def write_brush_size(context, val):
+    val = int(round(_clamp(val, 1, SIZE_MAX)))
+    _set_brush_size(context, val)
     return val
+
+
+def write_brush_strength(context, val):
+    val = _clamp(val, 0.0, 1.0)
+    _set_brush_strength(context, val)
+    return val
+
+
+def restore_brush_value(context, mode, start_size, start_strength):
+    """ESC: put back the value a drag changed, exactly as it was before it.
+    Deliberately NOT through the write_* clamps: a sculpt brush's strength can
+    exceed the 0..1 the drag works in, and restoring through the clamp would
+    still have changed it. Only the axis the drag locked onto is touched; a drag
+    that never engaged (mode None) changed nothing, so nothing is written."""
+    if mode == 'RADIUS':
+        _set_brush_size(context, start_size)
+    elif mode == 'STRENGTH':
+        _set_brush_strength(context, start_strength)
 
 
 # ── live value overlay ────────────────────────────────────────────────────────
 # Module-level so the POST_PIXEL draw callback (which takes no args) can read it.
+# 'region' is the pointer of the region the drag started in (see
+# gpu_draw.draws_here): set by this operator's invoke, and by the wheel's own
+# right-drag.
 _overlay = {'active': False, 'mode': None, 'x': 0, 'y': 0,
-            'radius': 0, 'strength': 0.0}
+            'radius': 0, 'strength': 0.0, 'region': None}
 _overlay_handle = None
 
 
 def _draw_overlay_cb():
-    if not _overlay['active']:
+    if not _overlay['active'] or not draws_here(_overlay.get('region')):
         return
     font = 0
     x = _overlay['x'] + 18
@@ -195,7 +219,8 @@ class SCULPTOOLS_OT_dynamic_sliders(Operator):
         _overlay.update(active=False, mode=None,
                         x=event.mouse_region_x, y=event.mouse_region_y,
                         radius=int(round(self._start_size)),
-                        strength=float(self._start_strength))
+                        strength=float(self._start_strength),
+                        region=pointer_of(getattr(context, "region", None)))
         _enable_overlay()
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
@@ -238,6 +263,10 @@ class SCULPTOOLS_OT_dynamic_sliders(Operator):
             return {'FINISHED'}
 
         if event.type == 'ESC' and event.value == 'PRESS':
+            # Cancel means undo the adjustment, as Blender's own radial control
+            # does — not merely stop adjusting and keep the dragged value.
+            restore_brush_value(context, self._mode,
+                                self._start_size, self._start_strength)
             self._finish(context)
             return {'CANCELLED'}
 

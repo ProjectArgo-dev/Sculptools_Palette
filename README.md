@@ -66,7 +66,7 @@ switched off from the **Palette** sidebar tab:
 | `Tab` / `Shift + Tab` | Cycle to next / previous palette |
 | `Ctrl` + `1`–`8` | Jump directly to palette 1–8 |
 | `1`–`9`, `0` | **Quick Numbers**: activate a slot's brush (repeat to cycle sub-slots) |
-| Right-click + drag | **Dynamic Brush Sliders**: adjust brush Radius / Strength |
+| Right-click + drag | **Dynamic Brush Sliders**: adjust brush Radius / Strength (`Esc` cancels) |
 
 > **Flick mode:** tap `\` and flick the cursor straight at a slot to select it in one
 > gesture. Holding the key down keeps that gesture alive for as long as you need, so you

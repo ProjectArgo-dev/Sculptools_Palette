@@ -53,18 +53,13 @@ def _draw_assign_picker(layout, context, brush_name):
     from .prefs import (get_slot, get_sub, get_num_slots,
                         SUB_CYCLE_ORDER, sub_display_number,
                         get_active_palette)
-    from .tools import is_tool_spec, best_tool_label, get_tool
+    from .tools import is_tool_spec, best_tool_label, display_name
     def _disp(n):
         return best_tool_label(n) if is_tool_spec(n) else n
     # Friendly title: a tool spec ("tool:box_mask") shows the tool's display name
     # + tool icon; a bare brush name is shown verbatim.
-    if is_tool_spec(brush_name):
-        entry = get_tool(brush_name)
-        title = entry.display if entry else best_tool_label(brush_name)
-        title_icon = "TOOL_SETTINGS"
-    else:
-        title = brush_name
-        title_icon = "BRUSHES_ALL"
+    title = display_name(brush_name)
+    title_icon = "TOOL_SETTINGS" if is_tool_spec(brush_name) else "BRUSHES_ALL"
     layout.label(text=f'Assign  "{title}"  to:', icon=title_icon)
     # Show WHICH palette the slots/subs listed below belong to.
     layout.label(text=f'Palette:  {get_active_palette(context).name}',
@@ -154,29 +149,14 @@ class SCULPTOOLS_OT_confirm_assign(Operator):
 
     def execute(self, context):
         from .prefs import set_slot, set_sub, sub_display_number
+        from .tools import display_name
+        shown = display_name(self.brush_name)
         if self.sub_index < 0:
             set_slot(context, self.slot_index, self.brush_name)
-            self.report({'INFO'}, f"Sculptools: '{self.brush_name}' → Slot {self.slot_index+1}")
+            self.report({'INFO'}, f"Sculptools: '{shown}' → Slot {self.slot_index+1}")
         else:
             set_sub(context, self.slot_index, self.sub_index, self.brush_name)
-            self.report({'INFO'}, f"Sculptools: '{self.brush_name}' → Slot {self.slot_index+1} / Sub {sub_display_number(self.sub_index)}")
-        return {'FINISHED'}
-
-
-class SCULPTOOLS_OT_clear_slot(Operator):
-    bl_idname  = "sculptools.clear_slot"
-    bl_label   = "Clear Slot"
-    bl_options = {'INTERNAL'}
-
-    slot_index: IntProperty(default=0)  # type: ignore
-    sub_index:  IntProperty(default=-1) # type: ignore
-
-    def execute(self, context):
-        from .prefs import set_slot, set_sub
-        if self.sub_index < 0:
-            set_slot(context, self.slot_index, "")
-        else:
-            set_sub(context, self.slot_index, self.sub_index, "")
+            self.report({'INFO'}, f"Sculptools: '{shown}' → Slot {self.slot_index+1} / Sub {sub_display_number(self.sub_index)}")
         return {'FINISHED'}
 
 
@@ -372,11 +352,12 @@ def _draw_slot_actions(layout, context, slot, sub):
     op_copy.slot_index = slot
     op_copy.sub_index  = sub
 
+    from .tools import display_name
     paste_name = _slot_clipboard.get('brush', '')
     row_p = layout.row()
     row_p.enabled = bool(paste_name)
     op_paste = row_p.operator("sculptools.slot_paste",
-                              text=f'Paste  “{paste_name}”' if paste_name
+                              text=f'Paste  “{display_name(paste_name)}”' if paste_name
                                    else "Paste Brush",
                               icon="DUPLICATE")
     op_paste.slot_index = slot
@@ -540,7 +521,8 @@ class SCULPTOOLS_OT_slot_cut(Operator):
         else:
             set_slot(context, slot, '')
         if name:
-            self.report({'INFO'}, f"Sculptools: cut '{name}'")
+            from .tools import display_name
+            self.report({'INFO'}, f"Sculptools: cut '{display_name(name)}'")
         return {'FINISHED'}
 
 
@@ -561,9 +543,10 @@ class SCULPTOOLS_OT_slot_copy(Operator):
         slot, sub = _resolve_target(self.slot_index, self.sub_index)
         if slot < 0:
             return {'CANCELLED'}
+        from .tools import display_name
         name = get_sub(context, slot, sub) if sub >= 0 else get_slot(context, slot)
         _slot_clipboard['brush'] = name or ''
-        self.report({'INFO'}, f"Sculptools: copied '{name}'" if name
+        self.report({'INFO'}, f"Sculptools: copied '{display_name(name)}'" if name
                     else "Sculptools: slot empty — clipboard cleared")
         return {'FINISHED'}
 
@@ -589,12 +572,14 @@ class SCULPTOOLS_OT_slot_paste(Operator):
         if not brush:
             self.report({'WARNING'}, "Sculptools clipboard is empty")
             return {'CANCELLED'}
+        from .tools import display_name
+        shown = display_name(brush)
         if sub >= 0:
             set_sub(context, slot, sub, brush)
-            self.report({'INFO'}, f"Sculptools: pasted '{brush}' → Slot {slot+1} / Sub {sub_display_number(sub)}")
+            self.report({'INFO'}, f"Sculptools: pasted '{shown}' → Slot {slot+1} / Sub {sub_display_number(sub)}")
         else:
             set_slot(context, slot, brush)
-            self.report({'INFO'}, f"Sculptools: pasted '{brush}' → Slot {slot+1}")
+            self.report({'INFO'}, f"Sculptools: pasted '{shown}' → Slot {slot+1}")
         return {'FINISHED'}
 
 
@@ -631,14 +616,13 @@ class SCULPTOOLS_OT_assign_tool_to_slot(Operator):
 
     def execute(self, context):
         from .prefs import set_slot, set_sub, sub_display_number
-        from .tools import TOOL_PREFIX, get_tool, is_oneshot
+        from .tools import TOOL_PREFIX, display_name, is_oneshot
         slot = _assign_target.get('slot', -1)
         sub  = _assign_target.get('sub', -1)
         if slot < 0 or not self.tool_key:
             return {'CANCELLED'}
         spec  = f"{TOOL_PREFIX}{self.tool_key}"
-        entry = get_tool(self.tool_key)
-        label = entry.display if entry else self.tool_key
+        label = display_name(spec)
         if sub >= 0:
             set_sub(context, slot, sub, spec)
             self.report({'INFO'}, f"Sculptools: '{label}' → Slot {slot+1} / Sub {sub_display_number(sub)}")
@@ -1172,7 +1156,6 @@ all_operator_classes = [
     SCULPTOOLS_PT_assign_to_slot,
     SCULPTOOLS_OT_assign_to_slot,
     SCULPTOOLS_OT_confirm_assign,
-    SCULPTOOLS_OT_clear_slot,
     SCULPTOOLS_OT_shelf_add,
     SCULPTOOLS_OT_toolbar_add_brush,
     SCULPTOOLS_OT_toolbar_add,

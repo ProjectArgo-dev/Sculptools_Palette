@@ -10,12 +10,43 @@ import bpy
 from bpy.types import Panel, Operator
 
 from .prefs import (get_prefs, key_label, get_slot, get_sub, get_num_slots, NUM_SUBSLOTS,
-                    get_active_palette, ensure_palettes, can_delete)
+                    read_active_slots, ensure_palettes, can_delete)
 from .quick_numbers import quick_number_slot
 from .gpu_draw import (draw_palette, clear_texture_cache, diagnose_brush_preview,
-                       request_preview_by_name, _effective_layout)
+                       request_preview_by_name, _effective_layout, pointer_of)
 
 _preview_handle = None
+
+# ── which viewport the Preview Editor lives in ────────────────────────────────
+# The draw handler runs for every region of every 3D view, so the preview used to
+# appear in all of them (four times in Quad View). It belongs to ONE viewport, the
+# one the user is working in: where it was switched on, and from then on wherever
+# one of its settings is changed or the palettes are cycled. Kept as a pointer in
+# a module variable — safe to write from an operator or a property update, and
+# read back by the draw callback. None = no viewport yet (the sidebar watch adopts
+# one, see _resolve_preview_area).
+_preview_owner = {'area': None}
+
+
+def note_preview_area(area):
+    """Make *area* the viewport the Preview Editor draws in. Anything that is not
+    a 3D view (the file browser an import ran from, a script) is ignored."""
+    if getattr(area, "type", None) == 'VIEW_3D':
+        _preview_owner['area'] = pointer_of(area)
+
+
+def _preview_draws_here(context):
+    """True when the region being drawn is where the preview belongs: the owner
+    viewport, and in Quad View only its main region (measured on 5.2.2: exactly
+    one of the four has region.data == space_data.region_3d)."""
+    owner = _preview_owner['area']
+    if owner is None or pointer_of(getattr(context, "area", None)) != owner:
+        return False
+    main = getattr(getattr(context, "space_data", None), "region_3d", None)
+    data = getattr(getattr(context, "region", None), "data", None)
+    if main is not None and data is not None:
+        return pointer_of(main) == pointer_of(data)
+    return True
 
 
 def _draw_preview_cb():
@@ -28,26 +59,23 @@ def _draw_preview_cb():
         prefs = get_prefs(context)
     except Exception:
         return
-    if not prefs.show_preview:
+    if not prefs.show_preview or not _preview_draws_here(context):
         return
     region = context.region
     if not region:
         return
 
-    n = get_num_slots(context)
+    n, slots, sub_slots = read_active_slots(context)
     # EFFECTIVE anti-overlap geometry: same values as the modal, so the preview
     # shows exactly what the wheel will draw.
     R_eff, sep_eff = _effective_layout(
         prefs.palette_radius, prefs.slot_radius,
         prefs.sub_size_factor, prefs.sub_separation, n)
-    slots     = [get_slot(context, i) for i in range(n)]
-    sub_slots = [[get_sub(context, i, j) for j in range(NUM_SUBSLOTS)]
-                 for i in range(n)]
 
     cx, cy = region.width / 2, region.height / 2
 
-    prefs_e = ensure_palettes(context)
-    pit = prefs_e.palettes[prefs_e.active_palette_index]
+    # read_active_slots already ran ensure_palettes, so the index is clamped.
+    pit = prefs.palettes[prefs.active_palette_index]
 
     draw_palette({
         'cx':             cx,
@@ -66,8 +94,8 @@ def _draw_preview_cb():
         'alpha':          1.0,
         'slot_outline_width':   prefs.slot_outline_width,
         'subslot_outline_width': prefs.subslot_outline_width,
-        'slot_outline_colour':  tuple(get_active_palette(context).slot_outline_colour),
-        'subslot_outline_colour': tuple(get_active_palette(context).subslot_outline_colour),
+        'slot_outline_colour':  tuple(pit.slot_outline_colour),
+        'subslot_outline_colour': tuple(pit.subslot_outline_colour),
         'sub_size_factor':  prefs.sub_size_factor,
         'sub_separation':   sep_eff,
         'glow_size':        prefs.glow_size,
@@ -79,8 +107,8 @@ def _draw_preview_cb():
         # judge the gradient params across the whole wheel, not just on hover.
         'glow_all':         True,
         'is_preview':     True,
-        'palette_index':  prefs_e.active_palette_index + 1,
-        'palette_total':  len(prefs_e.palettes),
+        'palette_index':  prefs.active_palette_index + 1,
+        'palette_total':  len(prefs.palettes),
         'palette_name':   pit.name,
     })
 
@@ -128,38 +156,87 @@ _preview_watch_stop   = False
 _SIDEBAR_MIN_OPEN_PX = 60
 
 
-def _sidebar_visible(context):
-    """True if ANY 3D viewport currently shows its sidebar genuinely open (not
-    hidden with N, not dragged shut to the tab strip). Checked across every
-    viewport, not just the active one: with two viewports open, the preview must
-    keep drawing as long as one of them still shows the panel."""
-    try:
-        windows = context.window_manager.windows
-    except Exception:
-        return False
+def _sidebar_min_open(context):
+    """Width (UI-scaled px) above which a sidebar counts as genuinely open."""
     try:
         ui_scale = context.preferences.system.ui_scale or 1.0
     except Exception:
         ui_scale = 1.0
-    min_open = _SIDEBAR_MIN_OPEN_PX * ui_scale
-    for window in windows:
-        screen = getattr(window, "screen", None)
-        for area in (getattr(screen, "areas", None) or ()):
-            if area.type != 'VIEW_3D':
-                continue
-            space = getattr(getattr(area, "spaces", None), "active", None)
-            if not getattr(space, "show_region_ui", False):
-                continue        # sidebar hidden with N in this viewport
-            for region in (getattr(area, "regions", None) or ()):
-                if region.type == 'UI' and region.width > min_open:
-                    return True
+    return _SIDEBAR_MIN_OPEN_PX * ui_scale
+
+
+def _area_sidebar_open(area, min_open):
+    """True if this 3D viewport shows its sidebar genuinely open: not hidden with
+    N, not dragged shut to the tab strip."""
+    if getattr(area, "type", None) != 'VIEW_3D':
+        return False
+    space = getattr(getattr(area, "spaces", None), "active", None)
+    if not getattr(space, "show_region_ui", False):
+        return False            # sidebar hidden with N in this viewport
+    for region in (getattr(area, "regions", None) or ()):
+        if region.type == 'UI' and region.width > min_open:
+            return True
     return False
 
 
+def _view3d_areas(context):
+    """Every 3D viewport on screen, across all windows."""
+    try:
+        windows = context.window_manager.windows
+    except Exception:
+        return
+    for window in windows:
+        screen = getattr(window, "screen", None)
+        for area in (getattr(screen, "areas", None) or ()):
+            if area.type == 'VIEW_3D':
+                yield area
+
+
+def _resolve_preview_area(context, min_open):
+    """The viewport the Preview Editor belongs to, or None.
+
+    The recorded owner while it is still on screen — even with its sidebar
+    closed, which the caller treats as "switch the preview off". Otherwise (the
+    preview was saved ON from the last session, the owner was closed, Ctrl+Space
+    swapped it for a new area) the first viewport whose sidebar is open is
+    adopted as the owner."""
+    areas = list(_view3d_areas(context))
+    owner = _preview_owner['area']
+    for area in areas:
+        if pointer_of(area) == owner:
+            return area
+    for area in areas:
+        if _area_sidebar_open(area, min_open):
+            _preview_owner['area'] = pointer_of(area)
+            return area
+    return None
+
+
+def _preview_watch_step(context):
+    """One tick of the sidebar watch. Returns True to keep polling.
+
+    The preview is a companion to the sidebar of ITS viewport: when that sidebar
+    is closed or dragged shut, the preview goes off — even if another viewport
+    still shows the panel, since the preview would not be drawn there anyway."""
+    prefs = get_prefs(context)
+    if not prefs.show_preview:
+        return False             # preview already off — nothing to watch
+    min_open = _sidebar_min_open(context)
+    before = _preview_owner['area']
+    area = _resolve_preview_area(context, min_open)
+    if area is None or not _area_sidebar_open(area, min_open):
+        prefs.show_preview = False
+        _tag_redraw_view3d(context)
+        return False
+    if _preview_owner['area'] != before:
+        _tag_redraw_view3d(context)   # adopted a viewport: show it there now
+    return True
+
+
 def start_preview_sidebar_watch():
-    """Arm the poll that turns the Preview Editor off when the sidebar closes.
-    Idempotent (a second call while already watching is a no-op); the tick
-    disarms itself as soon as the preview is off or the sidebar is gone."""
+    """Arm the poll that turns the Preview Editor off when its viewport's sidebar
+    closes. Idempotent (a second call while already watching is a no-op); the
+    tick disarms itself as soon as the preview is off or the sidebar is gone."""
     global _preview_watch_active
     if _preview_watch_active:
         return
@@ -171,14 +248,7 @@ def start_preview_sidebar_watch():
             _preview_watch_active = False
             return None
         try:
-            context = bpy.context
-            prefs = get_prefs(context)
-            if not prefs.show_preview:
-                _preview_watch_active = False
-                return None          # preview already off — nothing to watch
-            if not _sidebar_visible(context):
-                prefs.show_preview = False
-                _tag_redraw_view3d(context)
+            if not _preview_watch_step(bpy.context):
                 _preview_watch_active = False
                 return None
         except Exception:
@@ -292,7 +362,6 @@ _AUTOSAVE_WARN_LINES = (
     "Palettes & hotkeys",
     "are lost on restart",
 )
-_AUTOSAVE_WARN_MAX_CHARS = 19
 
 
 def wrap_text_to_width(text, max_px, measure):
@@ -548,6 +617,7 @@ class SCULPTOOLS_OT_cycle_palette_holder(Operator):
         prefs = get_prefs(context)
         if not prefs.show_preview:
             return {'PASS_THROUGH'}
+        note_preview_area(context.area)    # cycled from here: show it here
         prefs_e = ensure_palettes(context)
         prefs_e.active_palette_index = wrap_index(
             prefs_e.active_palette_index, len(prefs_e.palettes), +1)
@@ -589,6 +659,7 @@ class SCULPTOOLS_OT_cycle_palette_back_holder(Operator):
         # the order of the two holders in the keymap.
         if get_cycle_key_binding(context)[3]:
             return {'PASS_THROUGH'}
+        note_preview_area(context.area)    # cycled from here: show it here
         prefs_e = ensure_palettes(context)
         prefs_e.active_palette_index = wrap_index(
             prefs_e.active_palette_index, len(prefs_e.palettes), -1)
@@ -610,6 +681,9 @@ class SCULPTOOLS_OT_toggle_preview(Operator):
     def execute(self, context):
         from .prefs import sync_cycle_back_binding
         prefs = get_prefs(context)
+        if not prefs.show_preview:
+            # The button lives in a viewport's sidebar: that is where it shows.
+            note_preview_area(context.area)
         prefs.show_preview = not prefs.show_preview
         # Realign the back holder (Shift+<cycle key>) outside the draw path, so
         # backward cycling in the preview reflects any rebind of the cycle hotkey.

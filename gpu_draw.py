@@ -10,10 +10,10 @@ import blf
 import gpu
 from gpu_extras.batch import batch_for_shader
 
-# numpy ships with Blender; used for the CPU-side circular alpha mask that
-# gives thumbnails a round crop (see _build_texture). Guarded so the addon
-# still loads — falling back to an un-masked square thumbnail — in the
-# extremely unlikely case it is unavailable.
+# numpy ships with Blender; used to soften the thumbnails' round edge and for the
+# bulk preview read (see _build_texture, _read_rna_float_array). Guarded so the
+# add-on still loads — on the slower pure-Python paths — in the extremely
+# unlikely case it is unavailable.
 try:
     import numpy as _np
 except Exception:
@@ -24,7 +24,6 @@ from . import preview_index as _pidx
 # ── colours ───────────────────────────────────────────────────────────────────
 C_BG         = (0.12, 0.12, 0.12, 0.88)
 C_BG_HOVER   = (0.20, 0.20, 0.20, 0.96)
-C_RING_HOVER = (0.90, 0.55, 0.10, 1.00)
 C_RING_EMPTY = (0.22, 0.22, 0.22, 0.55)
 C_TEXT       = (1.00, 1.00, 1.00, 1.00)
 C_TEXT_EMPTY = (0.38, 0.38, 0.38, 1.00)
@@ -35,7 +34,6 @@ C_CENTER     = (0.30, 0.30, 0.30, 0.50)
 # 1px grey (#808080) ring. Fixed by design — not user-configurable.
 RESTING_OUTLINE_COLOUR = (0.5, 0.5, 0.5)
 RESTING_OUTLINE_WIDTH  = 1.0
-C_SUB_RIM    = (0.50, 0.50, 0.50, 1.00)
 C_DIM        = (0.00, 0.00, 0.00, 0.52)
 
 # Created at import time in a GUI session. In `blender --background`, shader
@@ -471,7 +469,6 @@ def preload_bundled_previews():
 # Failed/pending lookups are NOT cached so we retry on later frames, since
 # Blender may still be generating the asset preview render.
 _tex_cache: dict            = {}   # brush_name → GPUTexture
-_tex_masked: dict           = {}   # brush_name → bool (circular crop applied?)
 _preview_requested: set     = set()  # brush_name → generation already queued
 _preview_requested_at: dict = {}     # brush_name → time.time() when queued
 _pending_preview_names: set = set()  # brush_name → waiting to be processed
@@ -487,7 +484,6 @@ _mask_cache: dict           = {}   # (w, h) → flat float32 alpha mask
 def clear_texture_cache():
     global _bundled_preload_done, _drain_state
     _tex_cache.clear()
-    _tex_masked.clear()
     _preview_requested.clear()
     _preview_requested_at.clear()
     _bundled_preview_cache.clear()
@@ -595,9 +591,11 @@ def _srgb_to_linear(v):
 
 def _build_texture(w, h, raw):
     """Build a GPUTexture from a flat RGBA float buffer, multiplying the alpha
-    channel by the circular mask so the disc edge is soft. Returns
-    (GPUTexture, masked: bool) or (None, False) on failure. Shared by the
-    bundled-artwork fast path and the generic-generation fallback.
+    channel by the circular mask so the disc edge is soft. Returns the
+    GPUTexture, or None on failure. If the mask cannot be applied the texture is
+    still built, only with a harder edge (the round shape comes from the geometry
+    in _draw_textured_disc). Shared by the bundled-artwork fast path and the
+    generic-generation fallback.
 
     The RGB channels are conditionally converted sRGB → LINEAR before upload
     (see _DECODE_SRGB_PREVIEWS above): preview pixels (image_pixels_float) and
@@ -607,7 +605,6 @@ def _build_texture(w, h, raw):
     POST_PIXEL draw lands in display space as-is, so decoding would only darken
     them (the bug this gate fixes)."""
     n = w * h * 4
-    masked = False
     mask = _circular_alpha_mask(w, h)
     if _np is not None:
         try:
@@ -626,10 +623,8 @@ def _build_texture(w, h, raw):
                     rgb[~low] = ((rgb[~low] + 0.055) / 1.055) ** 2.4
                 arr[3::4] *= mask           # alpha = every 4th float
                 raw = arr.tolist()
-                masked = True
         except Exception as exc:
             print(f"Sculptools: circular mask skipped ({exc})")
-            masked = False
     else:
         try:
             data = list(raw[:n])
@@ -641,18 +636,16 @@ def _build_texture(w, h, raw):
                     data[b + 2] = _srgb_to_linear(data[b + 2])
                 data[b + 3] *= mask[i]
             raw = data
-            masked = True
         except Exception as exc:
             print(f"Sculptools: circular mask skipped ({exc})")
-            masked = False
     try:
         data = raw if (isinstance(raw, list) and len(raw) == n) else list(raw)[:n]
         buf = gpu.types.Buffer('FLOAT', n, data)
         tex = gpu.types.GPUTexture((w, h), format='RGBA16F', data=buf)
-        return tex, masked
+        return tex
     except Exception as exc:
         print(f"Sculptools: texture build failed: {exc}")
-        return None, False
+        return None
 
 
 # ── bundled tool-icon textures ────────────────────────────────────────────────
@@ -803,12 +796,11 @@ def _get_tool_icon_texture(spec):
         floats[p*4 + 1] = floats[p*4 + 1] * a + bg_ * (1 - a)
         floats[p*4 + 2] = floats[p*4 + 2] * a + bb  * (1 - a)
         floats[p*4 + 3] = 1.0
-    tex, masked = _build_texture(w, h, floats)
+    tex = _build_texture(w, h, floats)
     if tex is None:
         _tool_icon_missing.add(spec)
         return None
     _tex_cache[spec] = tex
-    _tex_masked[spec] = masked
     return tex
 
 
@@ -1224,10 +1216,9 @@ def _get_brush_texture(brush_name: str):
         bundled = _bundled_preview_cache[asset_name]
         if bundled is not None:
             w, h, raw = bundled
-            tex, masked = _build_texture(w, h, raw)
+            tex = _build_texture(w, h, raw)
             if tex is not None:
                 _tex_cache[brush_name] = tex
-                _tex_masked[brush_name] = masked
                 _last_reject_reason.pop(brush_name, None)
                 return tex
             _last_reject_reason[brush_name] = "bundled texture build failed"
@@ -1259,10 +1250,9 @@ def _get_brush_texture(brush_name: str):
         pix = _extract_preview_pixels(brush)
         if pix is not None:
             w, h, raw = pix
-            tex, masked = _build_texture(w, h, raw)
+            tex = _build_texture(w, h, raw)
             if tex is not None:
                 _tex_cache[brush_name] = tex
-                _tex_masked[brush_name] = masked
                 _last_reject_reason.pop(brush_name, None)
                 return tex
         # Live preview not usable yet — fall back to reading it from the source
@@ -1385,12 +1375,11 @@ def _get_brush_texture(brush_name: str):
                 f"buffer is fully transparent ({w}x{h} pixels, all alpha <= 0.01)")
             return None
 
-        buf_tex, masked = _build_texture(w, h, raw)
+        buf_tex = _build_texture(w, h, raw)
         if buf_tex is None:
             _last_reject_reason[brush_name] = "texture build failed"
             return None
         _tex_cache[brush_name] = buf_tex
-        _tex_masked[brush_name] = masked
         _last_reject_reason.pop(brush_name, None)
         return buf_tex
 
@@ -1489,15 +1478,118 @@ def _effective_layout(R, sr, sub_sf, gap, n, margin=4.0):
     return R_eff, gap_eff
 
 
+# ── which region a POST_PIXEL callback belongs to ─────────────────────────────
+# SpaceView3D.draw_handler_add calls its callback for EVERY 'WINDOW' region of
+# EVERY 3D view, so anything positioned in one region's coordinates was painted
+# into all of them: four times in Quad View, once per viewport otherwise (measured
+# on 5.2.2). The wheel (modal.py), the slider readout (dynamic_sliders.py) and the
+# Preview Editor (panel.py) all filter themselves with these two helpers.
+
+def pointer_of(struct):
+    """as_pointer() of a Blender struct (a region, an area), or None for None."""
+    try:
+        return struct.as_pointer() if struct is not None else None
+    except Exception:
+        return None
+
+
+def draws_here(owner_ptr):
+    """True if a draw callback should paint in the region being drawn right now.
+    *owner_ptr* is pointer_of(the region where the interaction started); None
+    means "unknown" and keeps the old behaviour of painting everywhere."""
+    if owner_ptr is None:
+        return True
+    return pointer_of(getattr(bpy.context, "region", None)) == owner_ptr
+
+
+# ── per-segment-count geometry tables ─────────────────────────────────────────
+# Every ring, glow, filled circle and thumbnail disc used to recompute its cos/sin
+# and re-list its triangle indices on EVERY frame, for every slot and sub-slot.
+# Measured with the stubs (GPU calls stubbed out, so Python only): ~18 ms per
+# frame with the wheel open and ~35 ms with the Preview Editor's all-subs, all-glow
+# view — more than a whole 60 Hz frame, spent rebuilding data that depends only on
+# the segment count. So those tables are built once per count and reused, and each
+# call is left with the scale-and-offset of its vertices. The vertices are the very
+# same floats as before (same expressions, same evaluation order) and the batches
+# copy what they are given, so sharing the cached lists is safe;
+# test_draw_geometry_unchanged_by_caching pins both.
+_GEOM_CACHE: dict = {}
+
+
+def _unit_circle(n, closed=True):
+    """(cos, sin) of 2*pi*i/n for i in 0..n (closed: the first point repeated at
+    the end, for strips) or 0..n-1 (open, for indexed rings that wrap)."""
+    key = ('unit', n, closed)
+    tab = _GEOM_CACHE.get(key)
+    if tab is None:
+        tab = tuple((math.cos(2 * math.pi * i / n), math.sin(2 * math.pi * i / n))
+                    for i in range(n + 1 if closed else n))
+        _GEOM_CACHE[key] = tab
+    return tab
+
+
+def _fan_indices(n):
+    key = ('fan', n)
+    idx = _GEOM_CACHE.get(key)
+    if idx is None:
+        idx = [(0, i, i + 1) for i in range(1, n + 1)]
+        _GEOM_CACHE[key] = idx
+    return idx
+
+
+def _ring_indices(n):
+    """Three annuli (inner feather, core, outer feather) over four closed rings."""
+    key = ('ring', n)
+    idx = _GEOM_CACHE.get(key)
+    if idx is None:
+        idx = []
+        stride = n + 1
+        for band in range(3):
+            s0 = band * stride
+            s1 = (band + 1) * stride
+            for i in range(n):
+                idx.append((s0 + i, s0 + i + 1, s1 + i + 1))
+                idx.append((s0 + i, s1 + i + 1, s1 + i))
+        _GEOM_CACHE[key] = idx
+    return idx
+
+
+def _glow_indices(rings, n):
+    """Centre fan into the first ring, then the annuli between open rings."""
+    key = ('glow', rings, n)
+    idx = _GEOM_CACHE.get(key)
+    if idx is None:
+        idx = [(0, 1 + i, 1 + (i + 1) % n) for i in range(n)]
+        for ri in range(1, rings):
+            s0 = 1 + (ri - 1) * n
+            s1 = 1 + ri * n
+            for i in range(n):
+                i_n = (i + 1) % n
+                idx.append((s0 + i, s1 + i, s1 + i_n))
+                idx.append((s0 + i, s1 + i_n, s0 + i_n))
+        _GEOM_CACHE[key] = idx
+    return idx
+
+
+def _disc_uv(n):
+    """texCoords of the thumbnail fan: centre, then the inscribed circle."""
+    key = ('disc_uv', n)
+    uv = _GEOM_CACHE.get(key)
+    if uv is None:
+        uv = [(0.5, 0.5)] + [(0.5 + 0.5 * ca, 0.5 + 0.5 * sa)
+                             for ca, sa in _unit_circle(n)]
+        _GEOM_CACHE[key] = uv
+    return uv
+
+
 # ── GPU primitives ────────────────────────────────────────────────────────────
 def _circle_verts(cx, cy, r, n=56):
-    return [(cx + math.cos(2 * math.pi * i / n) * r,
-             cy + math.sin(2 * math.pi * i / n) * r) for i in range(n + 1)]
+    return [(cx + c * r, cy + s * r) for c, s in _unit_circle(n)]
 
 
 def _draw_filled_circle(cx, cy, r, color, n=56):
     verts = [(cx, cy)] + _circle_verts(cx, cy, r, n)
-    idx   = [(0, i, i + 1) for i in range(1, n + 1)]
+    idx   = _fan_indices(n)
     # Re-assert ALPHA blend before drawing: blf text rendering (used for the
     # hovered slot label) leaves the GPU blend state changed, which otherwise
     # makes translucent fills — and, before this, the transparent parts of
@@ -1526,6 +1618,7 @@ def _draw_radial_glow(cx, cy, r, color, alpha_center, falloff=1.0,
     if alpha_center <= 0.0 or r <= 0.0:
         return
     rgb = color[:3]
+    tab = _unit_circle(n, closed=False)
     # ring 0 is the single centre vertex; rings 1..rings each have n points
     pos  = [(cx, cy)]
     cols = [(rgb[0], rgb[1], rgb[2], alpha_center)]
@@ -1533,22 +1626,10 @@ def _draw_radial_glow(cx, cy, r, color, alpha_center, falloff=1.0,
         t  = ri / rings
         rr = r * t
         a  = _glow_alpha(t, alpha_center, falloff)
-        for i in range(n):
-            ang = 2 * math.pi * i / n
-            pos.append((cx + math.cos(ang) * rr, cy + math.sin(ang) * rr))
-            cols.append((rgb[0], rgb[1], rgb[2], a))
-    idx = []
-    # inner fan: centre (0) to first ring (indices 1..n)
-    for i in range(n):
-        idx.append((0, 1 + i, 1 + (i + 1) % n))
-    # annuli between successive rings
-    for ri in range(1, rings):
-        s0 = 1 + (ri - 1) * n
-        s1 = 1 + ri * n
-        for i in range(n):
-            i_n = (i + 1) % n
-            idx.append((s0 + i, s1 + i, s1 + i_n))
-            idx.append((s0 + i, s1 + i_n, s0 + i_n))
+        pos.extend([(cx + c * rr, cy + s * rr) for c, s in tab])
+        cols.extend([(rgb[0], rgb[1], rgb[2], a)] * n)
+    # inner fan from the centre, then the annuli between successive rings
+    idx = _glow_indices(rings, n)
     gpu.state.blend_set('ALPHA')
     SMOOTH.bind()
     batch_for_shader(SMOOTH, 'TRIS', {"pos": pos, "color": cols},
@@ -1590,24 +1671,13 @@ def _draw_ring(cx, cy, r, width, color, n=128, feather=1.0):
     r0, r1, r2, r3 = _ring_band_radii(r, width, feather)
     rgb = color[:3]
     a = color[3] if len(color) > 3 else 1.0
-    radii  = (r0, r1, r2, r3)
-    alphas = (0.0, a, a, 0.0)
+    tab = _unit_circle(n)
     pos = []
     cols = []
-    for rr, al in zip(radii, alphas):
-        for i in range(n + 1):
-            ang = 2 * math.pi * i / n
-            c, s = math.cos(ang), math.sin(ang)
-            pos.append((cx + c * rr, cy + s * rr))
-            cols.append((rgb[0], rgb[1], rgb[2], al))
-    idx = []
-    stride = n + 1
-    for band in range(3):        # three annuli: inner feather, core, outer feather
-        s0 = band * stride
-        s1 = (band + 1) * stride
-        for i in range(n):
-            idx.append((s0 + i, s0 + i + 1, s1 + i + 1))
-            idx.append((s0 + i, s1 + i + 1, s1 + i))
+    for rr, al in ((r0, 0.0), (r1, a), (r2, a), (r3, 0.0)):
+        pos.extend([(cx + c * rr, cy + s * rr) for c, s in tab])
+        cols.extend([(rgb[0], rgb[1], rgb[2], al)] * (n + 1))
+    idx = _ring_indices(n)       # three annuli: inner feather, core, outer feather
     gpu.state.blend_set('ALPHA')
     SMOOTH.bind()
     batch_for_shader(SMOOTH, 'TRIS', {"pos": pos, "color": cols},
@@ -1623,7 +1693,7 @@ def _draw_line(x0, y0, x1, y1, color, width=1.0):
                      {"pos": [(x0, y0), (x1, y1)]}).draw(UNIFORM)
 
 
-def _draw_textured_disc(cx, cy, r, tex, alpha=1.0, masked=True, n=48):
+def _draw_textured_disc(cx, cy, r, tex, alpha=1.0, n=48):
     """Draw *tex* as a filled DISC (triangle fan) of radius ~0.92r centred at
     (cx, cy), using Blender's built-in IMAGE_COLOR shader, sampling the
     texture's inscribed circle.
@@ -1651,13 +1721,9 @@ def _draw_textured_disc(cx, cy, r, tex, alpha=1.0, masked=True, n=48):
     # Fan: centre vertex + outline. texCoord maps the disc onto the texture's
     # inscribed circle (centre 0.5,0.5, radius 0.5) so the centred brush
     # artwork fills the slot and only the outer square margin is cropped.
-    pos = [(cx, cy)]
-    uv  = [(0.5, 0.5)]
-    for i in range(n + 1):
-        a = 2 * math.pi * i / n
-        ca, sa = math.cos(a), math.sin(a)
-        pos.append((cx + ca * rad, cy + sa * rad))
-        uv.append((0.5 + 0.5 * ca, 0.5 + 0.5 * sa))
+    pos = [(cx, cy)] + [(cx + ca * rad, cy + sa * rad)
+                        for ca, sa in _unit_circle(n)]
+    uv  = _disc_uv(n)
     gpu.state.blend_set('ALPHA')
     batch = batch_for_shader(shader, 'TRI_FAN', {"pos": pos, "texCoord": uv})
     shader.bind()
@@ -1717,8 +1783,7 @@ def _draw_slot_contents(sx, sy, r, name, is_hov, alpha, fallback_label=None):
     if name:
         tex = _get_brush_texture(name)
         if tex:
-            _draw_textured_disc(sx, sy, r, tex, alpha=alpha,
-                                masked=_tex_masked.get(name, True))
+            _draw_textured_disc(sx, sy, r, tex, alpha=alpha)
             if is_hov:
                 _draw_filled_circle(sx, sy, r,
                                     (*C_DIM[:3], alpha * C_DIM[3]))

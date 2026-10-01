@@ -20,7 +20,7 @@ from bpy.props import IntProperty
 from .prefs import (get_prefs, get_num_slots, get_slot, get_sub,
                     NUM_SUBSLOTS, SUB_CYCLE_ORDER,
                     get_open_key_binding, get_cycle_key_binding, keys_conflict)
-from .tools import is_oneshot
+from .tools import is_oneshot, display_name
 
 QUICK_NUMBER_WINDOW = 0.6   # seconds within which a same-key repeat keeps cycling
 
@@ -128,7 +128,7 @@ class SCULPTOOLS_OT_quick_number(Operator):
         _qn_state['index'] = index
         _qn_state['time']  = now
 
-        self.report({'INFO'}, f"Sculptools: '{name}' (slot {slot + 1})")
+        self.report({'INFO'}, f"Sculptools: '{display_name(name)}' (slot {slot + 1})")
         return {'FINISHED'}
 
 
