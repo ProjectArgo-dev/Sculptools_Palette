@@ -5,6 +5,8 @@
 # operators.py read prefs, read/write the file, and delegate to these helpers.
 # Importable and fully unit-testable under the validation stubs.
 
+import math
+
 from .prefs import (MAX_SLOTS, NUM_SUBSLOTS, DEFAULT_NUM_SLOTS,
                     NEW_SLOT_COLOUR, NEW_SUB_COLOUR)
 from .tools import is_tool_spec, get_tool, tool_available
@@ -50,12 +52,25 @@ def validate_preset(data):
     return True, ""
 
 
+def _is_finite(v):
+    """math.isfinite that answers False instead of raising: an int too large for
+    a float (JSON allows any size) raises OverflowError there."""
+    try:
+        return math.isfinite(v)
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
 def _coerce_colour(value, default):
     try:
         c = [float(value[0]), float(value[1]), float(value[2])]
-        return tuple(c)
-    except (TypeError, ValueError, IndexError, KeyError):
+    except (TypeError, ValueError, IndexError, KeyError, OverflowError):
         return tuple(default)
+    # NaN/Infinity are valid json.load output, and a NaN slips through Blender's
+    # property clamp and gets SAVED (verified on 5.2.2): treat it as invalid.
+    if not all(math.isfinite(v) for v in c):
+        return tuple(default)
+    return tuple(c)
 
 
 def sanitize_palette_dict(raw):
@@ -115,7 +130,9 @@ def sanitize_appearance(raw, known_keys, enum_choices=None):
         if k in enum_choices:
             if isinstance(v, str) and v in enum_choices[k]:
                 out[k] = v
-        elif isinstance(v, (int, float, bool)):
+        elif isinstance(v, (int, float, bool)) and _is_finite(v):
+            # Non-finite numbers are dropped like any other bad value: a NaN
+            # passes Blender's clamp and would be saved into the preferences.
             out[k] = v
     return out
 
