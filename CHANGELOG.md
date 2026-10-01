@@ -2,6 +2,34 @@
 
 All notable changes to **Sculptools: Palette** are listed here, newest first.
 
+## 1.3.1
+### Changed
+
+- **The Preview Editor appears only in the viewport you are working in.** It used to be
+  drawn in every 3D viewport, and four times in Quad View. It now shows where you switched
+  it on, and moves to another viewport when you adjust one of its settings or cycle
+  palettes from there. In Quad View it uses the main view. Closing that viewport's sidebar
+  turns it off.
+- **`Esc` cancels a Dynamic Brush Sliders drag.** Pressing `Esc` while right-dragging puts
+  the brush Radius or Strength back to what it was. With the wheel open, the first `Esc`
+  cancels the drag and keeps the wheel open; a second one closes it.
+
+### Fixed
+
+- **The wheel can no longer get stuck on screen.** Maximising the viewport (`Ctrl+Space`)
+  or switching workspace while the wheel was open left it drawn and frozen until Blender
+  was restarted. It now simply closes.
+- **The wheel and the Radius / Strength readout stay in their own viewport.** With several
+  viewports open, or in Quad View, they were drawn in all of them while responding in only
+  one.
+- **Smoother wheel and Preview Editor.** Drawing them takes a fraction of the time it did,
+  which shows most when sculpting with the Preview Editor open.
+- **Messages name tools properly.** Quick Numbers, assigning, cut / copy / paste messages
+  and the *Paste* menu entry read "Box Mask" instead of `tool:box_mask`.
+- **A damaged preset file can no longer break the wheel.** Invalid numbers in a preset
+  could leave the wheel's size unusable, and saved that way; they are now ignored on
+  import.
+
 ## 1.3.0
 ### Added
 
