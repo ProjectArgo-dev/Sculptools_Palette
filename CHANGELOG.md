@@ -2,6 +2,50 @@
 
 All notable changes to **Sculptools: Palette** are listed here, newest first.
 
+## 1.3.2
+### Changed
+
+- **A number key closes the wheel.** With the wheel open, pressing a slot's number
+  (Quick Numbers) switched brush but left the wheel on screen. It now closes, as it does
+  after a click. A number with nothing assigned leaves the wheel open.
+- **The Rename dialog is ready to type.** *Rename Palette* — and *New* / *Duplicate
+  Palette*, which open it — now start with the name field active, like Blender's own
+  rename. Before, typing did nothing until the field was clicked, and the keys could
+  trigger shortcuts underneath it. Press `Enter` to confirm the name, then `Enter` again
+  for OK.
+- **A slot that cannot be activated now says so.** If the brush or tool in a slot cannot
+  be activated — its library is missing, or the tool does not exist in this version of
+  Blender — a warning names it, instead of nothing happening.
+- **Messages carry the add-on's full name.** Status-bar messages, console lines and the
+  add-on's entries in the Keymap editor now start with "Sculptools: Palette", so it is
+  always clear which add-on they come from.
+
+### Fixed
+
+- **Custom hotkeys are no longer lost when Blender is opened from a `.blend` file.**
+  Opening Blender by double-clicking a `.blend` left the wheel on its default hotkey for
+  that session, and opening the Palette tab then saved the default over your own choice.
+  Your hotkeys are now restored however Blender is started. If you lost one this way, set
+  it once more. Palette thumbnails are also prepared again in such a session.
+- **Every Essentials brush can be selected from the wheel.** Brushes newer than the
+  add-on's own list — the Paint set (*Paint Blend*, *Paint Hard*…), *Scene Project* and
+  others — could be assigned and showed their thumbnail, but choosing them did not change
+  the brush. They all work now, including those future Blender versions will add.
+  Reported in issue #4.
+- **The wheel no longer stacks when its hotkey is `F`.** With Open Palette bound to `F`,
+  each press opened another wheel on top of the last instead of closing it. `F` now opens
+  and closes the wheel, and a Cycle Palette hotkey on `F` works too.
+- **Refreshing thumbnails keeps your brush changes.** *Refresh Thumbnails*, and the
+  thumbnail scan of your Asset Libraries, could drop the active brush or undo changes made
+  in this session to Essentials brushes (strength, radius…). They are now left alone.
+- **Opening a file with the wheel open no longer floods the console.** `Ctrl+N` or
+  `Ctrl+O` with the wheel open left an error printed at every redraw until Blender was
+  restarted.
+- **No more "No asset found" errors in the console** when switching back to a brush you
+  had already used.
+- **Brushes saved as assets in the current file now activate** from the wheel (Blender
+  5.1 and newer).
+
 ## 1.3.1
 ### Changed
 
