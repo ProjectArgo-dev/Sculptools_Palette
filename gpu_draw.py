@@ -47,7 +47,7 @@ try:
     # (_draw_radial_glow). Built-in — same Vulkan-safe class as UNIFORM_COLOR.
     SMOOTH  = gpu.shader.from_builtin('SMOOTH_COLOR')
 except SystemError as _exc:
-    print(f"Sculptools: GPU shaders unavailable (background mode?): {_exc}")
+    print(f"Sculptools: Palette GPU shaders unavailable (background mode?): {_exc}")
     UNIFORM = None
     SMOOTH  = None
 
@@ -77,7 +77,7 @@ def _get_image_shader():
         try:
             _IMAGE_SHADER = gpu.shader.from_builtin('IMAGE_COLOR')
         except Exception as e:
-            print(f"Sculptools: builtin shader error: {e}")
+            print(f"Sculptools: Palette builtin shader error: {e}")
     return _IMAGE_SHADER
 
 
@@ -99,6 +99,7 @@ _bundled_preload_done  = False     # whole Essentials set loaded once already?
 # Recorded during the custom-library preview scan (_load_custom_previews).
 _asset_source: dict = {}
 _custom_scan_active = False   # re-entrancy guard for _load_custom_previews
+_essentials_names = None      # brush names in THIS Blender's Essentials file (lazy)
 
 
 def _get_essentials_blend_path():
@@ -111,6 +112,31 @@ def _get_essentials_blend_path():
         except Exception:
             _ESSENTIALS_BLEND_PATH = ""
     return _ESSENTIALS_BLEND_PATH
+
+
+def essentials_brush_names():
+    """The set of brush names in this Blender's Essentials sculpt file, read once
+    per session. Lets the modal tell an Essentials brush from a custom-library one
+    without the hardcoded BRUSHES catalogue, which predates the brushes newer
+    Blenders ship (the Paint/Blend set, "Blur", "Scene Project" — GitHub issue #4).
+
+    Reads the names only: nothing is assigned to data_to, so nothing is linked,
+    no Library is left behind and the active brush is not touched (measured on
+    4.5, 5.1 and 5.2: ~40 ms, zero libraries and brushes added). A missing or
+    unreadable file yields an empty set — every name then takes the custom path,
+    which is what happened before."""
+    global _essentials_names
+    if _essentials_names is None:
+        names = set()
+        path = _get_essentials_blend_path()
+        if path and os.path.exists(path):
+            try:
+                with bpy.data.libraries.load(path, link=True, assets_only=True) as (data_from, _data_to):
+                    names = set(data_from.brushes)
+            except Exception as exc:
+                print(f"Sculptools: Palette could not read Essentials brush names: {exc}")
+        _essentials_names = names
+    return _essentials_names
 
 
 def _asset_name_for_brush(brush_name):
@@ -135,11 +161,13 @@ def _snapshot_active_sculpt_brush():
 
 
 def _restore_active_sculpt_brush(name):
-    """Re-activate *name* iff the active sculpt brush was lost. Linking the
-    Essentials library to read previews can deactivate the currently active
-    brush (the sculpt cursor then vanishes and the user has to re-pick the
-    brush — handoff §6.5). Reading it back and re-activating only when it
-    actually went missing makes that invisible."""
+    """Re-activate *name* iff the active sculpt brush was lost. Removing the
+    library a preview read linked used to deactivate the active brush (the
+    sculpt cursor then vanished and the user had to re-pick it — handoff §6.5).
+    _load_previews_from_file no longer removes a library the user links from,
+    so this is now a safety net: it only acts if the brush really went missing,
+    and restoring by name cannot tell a custom brush from its Essentials
+    namesake."""
     if not name:
         return
     try:
@@ -152,7 +180,7 @@ def _restore_active_sculpt_brush(name):
         from .modal import _activate_brush
         _activate_brush(name)
     except Exception as exc:
-        print(f"Sculptools: could not restore active brush '{name}': {exc}")
+        print(f"Sculptools: Palette could not restore active brush '{name}': {exc}")
 
 
 def _read_rna_float_array(rna_array, count):
@@ -213,28 +241,108 @@ def _extract_preview_pixels(brush):
     return None
 
 
-def _remove_linked_library(path):
-    """Remove the linked library whose filepath resolves to *path* (and, with
-    it, every ID linked from it), so nothing accumulates and a later link is
-    clean instead of warning 'already linked'."""
+def _library_for_path(path):
+    """The Library already linked from *path*, or None."""
     try:
         target = os.path.normpath(path)
         for candidate in list(bpy.data.libraries):
             try:
                 if os.path.normpath(bpy.path.abspath(candidate.filepath)) == target:
-                    bpy.data.libraries.remove(candidate)
-                    return
+                    return candidate
             except Exception:
                 pass
     except Exception:
         pass
+    return None
+
+
+def _remove_linked_library(path):
+    """Remove the linked library whose filepath resolves to *path* (and, with
+    it, every ID linked from it), so nothing accumulates and a later link is
+    clean instead of warning 'already linked'. Only for a library this add-on
+    created: see _load_previews_from_file."""
+    lib = _library_for_path(path)
+    if lib is not None:
+        try:
+            bpy.data.libraries.remove(lib)
+        except Exception:
+            pass
+
+
+# What linking a brush can bring along: the brush, plus its texture, that
+# texture's image and node group (on 5.2.2 an Essentials brush drags in the
+# texture "CloudNoise"). Brushes first: removing them is what leaves the rest
+# without users.
+_LINKED_ID_TYPES = ("brushes", "textures", "images", "node_groups")
+
+
+def _id_key(idb):
+    """Identity of an ID that survives re-reading it from bpy.data (each access
+    builds a new Python wrapper, so id() would not)."""
+    try:
+        return idb.as_pointer()
+    except Exception:
+        return id(idb)
+
+
+def _snapshot_ids():
+    """The (type, identity) of every ID a brush link can add — see
+    _remove_ids_linked_since."""
+    keys = set()
+    for attr in _LINKED_ID_TYPES:
+        for idb in getattr(bpy.data, attr, ()):
+            keys.add((attr, _id_key(idb)))
+    return keys
+
+
+def _remove_ids_linked_since(before):
+    """Remove every LINKED ID absent from *before* (a _snapshot_ids result):
+    exactly what a preview read just linked into a library the user was already
+    linking from — the brushes and the dependencies they dragged in. Nothing
+    else adds IDs during that synchronous read, and a local ID is never
+    touched."""
+    for attr in _LINKED_ID_TYPES:
+        coll = getattr(bpy.data, attr, None)
+        if coll is None:
+            continue
+        for idb in [i for i in coll
+                    if (attr, _id_key(i)) not in before
+                    and getattr(i, "library", None) is not None]:
+            try:
+                coll.remove(idb)
+            except Exception:
+                pass
+
+
+def _brushes_linked_from(lib):
+    """name → brush for the brushes the user already links from *lib*."""
+    out = {}
+    for b in bpy.data.brushes:
+        try:
+            if b.library is not None and b.library == lib:
+                out[b.name] = b
+        except Exception:
+            pass
+    return out
 
 
 def _load_previews_from_file(path, names):
     """Link the requested brush *names* from a single .blend, copy out each
-    brush's baked preview into _bundled_preview_cache, then remove the linked
-    library and restore the active sculpt brush if the link dropped it. Returns
-    the set of names actually found+cached in this file. Off-draw only (I/O).
+    brush's baked preview into _bundled_preview_cache, then undo the link.
+    Returns the set of names actually found+cached in this file. Off-draw only
+    (I/O).
+
+    Undoing the link depends on whose Library it is. Linking from a file that
+    is already linked REUSES its Library, and removing a Library removes every
+    ID linked from it — the user's active brush and the brushes they edited this
+    session included. Measured on 5.2.2: that made an active custom brush vanish
+    (or swapped it for its Essentials namesake) during the icon scan, and made
+    "Refresh Thumbnails" discard session edits (Layer strength 0.333 → 1.0). So
+    a Library that predates this read is kept and only what this read linked is
+    removed; a Library this read created is removed whole, as before (nothing
+    of the user's can be linked from it). Brushes the user already links from
+    that file are not requested again — their preview is read from the existing
+    ID — since each re-link logs 'Append: ID ... is already linked'.
 
     *names* may be None → load EVERY brush present in the file (used to preload
     all Essentials brushes, catalogued or not — see preload_bundled_previews)."""
@@ -242,12 +350,16 @@ def _load_previews_from_file(path, names):
     if not (path and os.path.exists(path)):
         return found
     active_snapshot = _snapshot_active_sculpt_brush()
+    lib = _library_for_path(path)
+    preexisting = lib is not None
+    before = _snapshot_ids() if preexisting else None
+    already = _brushes_linked_from(lib) if preexisting else {}
     try:
         with bpy.data.libraries.load(path, link=True, assets_only=True) as (data_from, data_to):
             available = list(data_from.brushes)
             present = (available if names is None
                        else [n for n in names if n in available])
-            data_to.brushes = present
+            data_to.brushes = [n for n in present if n not in already]
         if not available:
             # No brush assets in this file AT ALL — not merely none of the ones
             # asked for. Only that stronger fact is safe to cache: skipping a
@@ -255,15 +367,19 @@ def _load_previews_from_file(path, names):
             global _preview_index_dirty
             _pidx.record_empty(_preview_index, path, _file_stamp(path))
             _preview_index_dirty = True
-        for brush in (data_to.brushes or []):
+        reused = [already[n] for n in present if n in already]
+        for brush in list(data_to.brushes or []) + reused:
             if brush is None:
                 continue
             _bundled_preview_cache[brush.name] = _extract_preview_pixels(brush)
             found.add(brush.name)
     except Exception as exc:
-        print(f"Sculptools: preview batch load error ({path}): {exc}")
+        print(f"Sculptools: Palette preview batch load error ({path}): {exc}")
     finally:
-        _remove_linked_library(path)
+        if preexisting:
+            _remove_ids_linked_since(before)
+        else:
+            _remove_linked_library(path)
         _restore_active_sculpt_brush(active_snapshot)
     return found
 
@@ -345,7 +461,7 @@ def _ensure_preview_index():
     except FileNotFoundError:
         pass
     except Exception as exc:
-        print(f"Sculptools: preview index unreadable, rebuilding ({exc})")
+        print(f"Sculptools: Palette preview index unreadable, rebuilding ({exc})")
 
 
 def _save_preview_index():
@@ -362,7 +478,7 @@ def _save_preview_index():
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(_preview_index, fh)
     except Exception as exc:
-        print(f"Sculptools: could not save preview index: {exc}")
+        print(f"Sculptools: Palette could not save preview index: {exc}")
 
 
 def _plan_library_scan(remaining):
@@ -454,6 +570,9 @@ def preload_bundled_previews():
     # "Blur", the Paint/Blend set) that aren't catalogued but must still get
     # thumbnails. One link/unlink cycle; future-proof against later additions.
     _load_previews_from_file(_get_essentials_blend_path(), None)
+    # Warm the name set here, off the interaction path, so activating a brush
+    # from the wheel never pays the file read.
+    essentials_brush_names()
     # Mark any catalogued asset name absent from THIS Blender's Essentials file as
     # a miss, so it isn't retried against the file every frame (prior behaviour).
     try:
@@ -624,7 +743,7 @@ def _build_texture(w, h, raw):
                 arr[3::4] *= mask           # alpha = every 4th float
                 raw = arr.tolist()
         except Exception as exc:
-            print(f"Sculptools: circular mask skipped ({exc})")
+            print(f"Sculptools: Palette circular mask skipped ({exc})")
     else:
         try:
             data = list(raw[:n])
@@ -637,14 +756,14 @@ def _build_texture(w, h, raw):
                 data[b + 3] *= mask[i]
             raw = data
         except Exception as exc:
-            print(f"Sculptools: circular mask skipped ({exc})")
+            print(f"Sculptools: Palette circular mask skipped ({exc})")
     try:
         data = raw if (isinstance(raw, list) and len(raw) == n) else list(raw)[:n]
         buf = gpu.types.Buffer('FLOAT', n, data)
         tex = gpu.types.GPUTexture((w, h), format='RGBA16F', data=buf)
         return tex
     except Exception as exc:
-        print(f"Sculptools: texture build failed: {exc}")
+        print(f"Sculptools: Palette texture build failed: {exc}")
         return None
 
 
@@ -758,7 +877,7 @@ def _read_png_rgba(path):
             floats.extend(v / 255.0 for v in rows[y])
         return w, h, floats
     except Exception as exc:
-        print(f"Sculptools: tool icon PNG read failed ({path}): {exc}")
+        print(f"Sculptools: Palette tool icon PNG read failed ({path}): {exc}")
         return None
 
 
@@ -827,7 +946,7 @@ def _get_icon_texture(name):
         buf = gpu.types.Buffer('FLOAT', w * h * 4, floats)
         tex = gpu.types.GPUTexture((w, h), format='RGBA16F', data=buf)
     except Exception as exc:
-        print(f"Sculptools: {name} texture build failed: {exc}")
+        print(f"Sculptools: Palette {name} texture build failed: {exc}")
         _icon_tex_cache[name] = False
         return None
     _icon_tex_cache[name] = tex
@@ -1005,7 +1124,7 @@ def _process_preview_queue():
                     with bpy.context.temp_override(id=brush):
                         bpy.ops.ed.lib_id_generate_preview()
                 except Exception as exc:
-                    print(f"Sculptools: preview generation failed for '{n}': {exc}")
+                    print(f"Sculptools: Palette preview generation failed for '{n}': {exc}")
         if time.time() >= deadline:
             return _PREVIEW_TICK_INTERVAL_S
 
@@ -1026,7 +1145,8 @@ def _ensure_preview_timer():
     global _queue_timer_running
     if not _queue_timer_running:
         _queue_timer_running = True
-        bpy.app.timers.register(_process_preview_queue, first_interval=0.01)
+        bpy.app.timers.register(_process_preview_queue, first_interval=0.01,
+                                persistent=True)
 
 
 def _request_external_preview(name):
@@ -1384,7 +1504,7 @@ def _get_brush_texture(brush_name: str):
         return buf_tex
 
     except Exception as exc:
-        print(f"Sculptools: thumbnail error for '{brush_name}': {exc}")
+        print(f"Sculptools: Palette thumbnail error for '{brush_name}': {exc}")
         _last_reject_reason[brush_name] = f"exception: {exc}"
         return None
 

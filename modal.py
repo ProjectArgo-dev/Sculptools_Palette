@@ -41,58 +41,110 @@ _slot_context_target = {'slot': -1, 'sub': -1}  # set before opening context men
 # context-menu assign operators tell whether there is an open wheel to close.
 _wheel_active        = {'on': False}
 # Set True by the assign operators (Add Active Brush / Assign Tool) after they
-# write a slot WHILE the wheel is open. The modal polls it at the top of modal()
-# and finishes, so assigning from the slot context menu auto-closes the wheel.
+# write a slot WHILE the wheel is open, and by Quick Numbers when a number key
+# pressed with the wheel open activates a slot. The modal polls it at the top of
+# modal() and finishes, so either action auto-closes the wheel.
 _close_after_assign  = {'pending': False}
+# How Window.modal_operators names a running wheel (the C-style idname, measured
+# on 4.5 and 5.2), used by invoke to refuse stacking a second one.
+_WHEEL_RUNNING_ID    = "SCULPTOOLS_OT_radial_palette"
 
 
 # ── brush activation ──────────────────────────────────────────────────────────
 
+def _active_sculpt_brush_name():
+    """Name of the active sculpt brush, or None."""
+    try:
+        sc = bpy.context.scene.tool_settings.sculpt
+        return sc.brush.name if (sc and sc.brush) else None
+    except Exception:
+        return None
+
+
 def _activate_brush(brush_name):
+    """Activate *brush_name*; True if it is the active brush afterwards.
+
+    Judged by the brush that ends up active, not by what the operators return:
+    a failed attempt is swallowed further down (asset_activate raises on a
+    missing asset, a read-only sculpt.brush raises too), and success can come
+    from any of several paths. Already being the active brush counts as success.
+    """
     from .brushes import BRUSHES
     for display, bpy_data_name, asset_name, _icon in BRUSHES:
         if brush_name in (display, bpy_data_name, asset_name):
             _do_activate(bpy_data_name, asset_name)
-            return
+            return _active_sculpt_brush_name() in (bpy_data_name, asset_name)
+    # An Essentials brush the catalogue does not list: newer Blenders ship more
+    # than the 53 it knows (9 missing on 4.5, 11 on 5.2 — the Paint/Blend set,
+    # "Blur", "Scene Project"). They used to fall through to the custom path,
+    # which never looks at Essentials, so they did nothing (GitHub issue #4).
+    # Asking the file itself covers any brush a future Blender adds.
+    from .gpu_draw import essentials_brush_names
+    if brush_name in essentials_brush_names():
+        _do_activate(brush_name, brush_name)
+        return _active_sculpt_brush_name() == brush_name
     # Not one of Blender's Essentials → a custom asset-library brush (or a plain
     # local brush). Activating it from ESSENTIALS would fail ("No asset found"),
     # which is exactly why custom brushes stayed on Draw after reopening a file.
     _do_activate_custom(brush_name)
+    return _active_sculpt_brush_name() == brush_name
 
 
 def _activate_slot(spec):
-    """Dispatch a slot's stored value. Brush specs (no prefix) go to the
-    existing brush path unchanged. 'tool:<key>' specs arm an interactive tool
-    (wm.tool_set_by_id) or fire a one-shot operator. Unknown key / operator
-    failure = logged no-op, never an exception (mirrors the custom-brush
-    fallback). Called at modal confirm/flick, never inside the POST_PIXEL
-    draw callback (golden rule #4)."""
+    """Dispatch a slot's stored value and return whether it took. Brush specs
+    (no prefix) go to the brush path. 'tool:<key>' specs arm an interactive tool
+    (wm.tool_set_by_id) or fire a one-shot operator. Never raises: an unknown
+    key or a failing operator is logged and returns False. A one-shot that ends
+    CANCELLED still counts as done — Blender's own way of saying there was
+    nothing to do — and a popup, which opens a tick later, is assumed to.
+    Called at modal confirm/flick, never inside the POST_PIXEL draw callback
+    (golden rule #4)."""
     from .tools import parse_spec
     kind, payload = parse_spec(spec)
     if kind != 'tool':
-        _activate_brush(spec)
-        return
+        return _activate_brush(spec)
     entry = payload
     if entry is None:
-        print(f"Sculptools: unknown tool key in '{spec}'")
-        return
+        print(f"Sculptools: Palette unknown tool key in '{spec}'")
+        return False
     try:
         if entry.kind == 'TOOL':
-            bpy.ops.wm.tool_set_by_id(name=entry.target)
-        else:  # 'OP'
-            module, func = entry.target.split(".", 1)
-            op = getattr(getattr(bpy.ops, module), func)
-            ctx = entry.exec_ctx or 'INVOKE_DEFAULT'
-            if entry.target.startswith("wm.call_"):
-                # A popup (call_menu/call_menu_pie/call_panel) cannot open while
-                # this radial modal still holds the input grab and is about to
-                # return FINISHED. Defer one tick: by then the wheel has closed
-                # and the menu pops under the cursor (golden rule #4 async).
-                _defer_popup(op, ctx, dict(entry.params), spec)
-            else:
-                op(ctx, **entry.params)
+            return 'FINISHED' in bpy.ops.wm.tool_set_by_id(name=entry.target)
+        module, func = entry.target.split(".", 1)
+        op = getattr(getattr(bpy.ops, module), func)
+        ctx = entry.exec_ctx or 'INVOKE_DEFAULT'
+        if entry.target.startswith("wm.call_"):
+            # A popup (call_menu/call_menu_pie/call_panel) cannot open while
+            # this radial modal still holds the input grab and is about to
+            # return FINISHED. Defer one tick: by then the wheel has closed
+            # and the menu pops under the cursor (golden rule #4 async).
+            _defer_popup(op, ctx, dict(entry.params), spec)
+        else:
+            op(ctx, **entry.params)
+        return True
     except Exception as exc:
-        print(f"Sculptools: tool '{spec}' activation failed: {exc}")
+        print(f"Sculptools: Palette tool '{spec}' activation failed: {exc}")
+        return False
+
+
+def activation_failed_message(spec):
+    """The warning shown when a slot could not be activated: the add-on's full
+    name, and the slot's full display name ('Box Mask', not 'tool:box_mask')."""
+    from .tools import display_name
+    return f"Sculptools: Palette could not activate '{display_name(spec)}'"
+
+
+def _activate_or_warn(op, spec):
+    """Activate *spec* and, if it did not take, say so through *op*'s report.
+    Failing in silence is what made GitHub issue #4 look like icons that do
+    nothing at all. Returns the outcome."""
+    activated = _activate_slot(spec)
+    if not activated:
+        try:
+            op.report({'WARNING'}, activation_failed_message(spec))
+        except Exception:
+            pass
+    return activated
 
 
 def _defer_popup(op, ctx, params, spec):
@@ -101,37 +153,52 @@ def _defer_popup(op, ctx, params, spec):
         try:
             op(ctx, **params)
         except Exception as exc:
-            print(f"Sculptools: menu '{spec}' failed to open: {exc}")
+            print(f"Sculptools: Palette menu '{spec}' failed to open: {exc}")
         return None
     try:
         bpy.app.timers.register(_later, first_interval=0.01)
     except Exception as exc:
-        print(f"Sculptools: could not schedule menu '{spec}': {exc}")
+        print(f"Sculptools: Palette could not schedule menu '{spec}': {exc}")
+
+
+def _is_local_asset(brush):
+    """True only for a brush LOCAL activation can find: marked as an asset AND
+    living in this file. A brush linked from the Essentials file or from a custom
+    library carries asset_data too, but LOCAL activation cannot find it: Blender
+    prints 'No asset found at path "<name>"' to the system console and returns
+    CANCELLED. Trying it anyway turned every activation of a brush already used
+    in the session into a console error, Draw included."""
+    return (getattr(brush, "asset_data", None) is not None
+            and getattr(brush, "library", None) is None)
+
+
+def _local_asset_id(brush):
+    """relative_asset_identifier of a brush asset in the current file: the ID
+    type folder plus the name. Measured on 5.1 and 5.2: "Brush/<name>" activates,
+    the bare name does not (not even with the file saved), so with the bare name
+    a local asset never activated at all — sculpt.brush is read-only, which
+    leaves no fallback. On 4.5 neither form is found: no regression there."""
+    return f"Brush/{brush.name}"
 
 
 def _do_activate_custom(name):
     """Activate a brush that is NOT one of Blender's Essentials: a brush from a
-    user's custom asset library, or a plain local brush. Order:
-      1. a live local copy (LOCAL activation for an asset, else set it active);
+    user's custom asset library, or a local asset brush. Order:
+      1. a local asset in this file, activated as LOCAL;
       2. the custom asset library it came from — resolved (and cached) by the
          thumbnail scan (gpu_draw.resolve_asset_source), activated as CUSTOM.
     This is what lets custom-library brushes activate after the file is reopened
-    (when they are not yet instantiated in bpy.data.brushes)."""
+    (when they are not yet instantiated in bpy.data.brushes).
+    There is no "just set it active" fallback: sculpt.brush is read-only on every
+    supported version (measured on 4.5, 5.1 and 5.2), so a brush that is not an
+    asset cannot be activated at all."""
     brush = bpy.data.brushes.get(name)
-    if brush is not None:
-        if getattr(brush, "asset_data", None) is not None:
-            try:
-                r = bpy.ops.brush.asset_activate(
-                    asset_library_type='LOCAL',
-                    relative_asset_identifier=brush.name)
-                if 'FINISHED' in r:
-                    return
-            except Exception:
-                pass
+    if brush is not None and _is_local_asset(brush):
         try:
-            sc = bpy.context.tool_settings.sculpt
-            if sc is not None:
-                sc.brush = brush
+            r = bpy.ops.brush.asset_activate(
+                asset_library_type='LOCAL',
+                relative_asset_identifier=_local_asset_id(brush))
+            if 'FINISHED' in r:
                 return
         except Exception:
             pass
@@ -155,18 +222,19 @@ def _do_activate_custom(name):
 
 def _do_activate(bpy_data_name, asset_name):
     brush = bpy.data.brushes.get(bpy_data_name) or bpy.data.brushes.get(asset_name)
-    # Only try LOCAL activation when the brush actually exists locally AND is
-    # marked as an asset — otherwise the LOCAL attempt is doomed and Blender
-    # prints a "No asset found at path '…'" warning before we fall back to
-    # ESSENTIALS (handoff §6.3). The identifier for a LOCAL asset is the bare
-    # brush name, NOT "Brush/<name>" (that path-style form is only for the
-    # ESSENTIALS library file below) — the old "Brush/" prefix was itself the
-    # source of the 'Brush/…' text in that warning.
-    if brush is not None and getattr(brush, "asset_data", None) is not None:
+    # Only try LOCAL activation when the brush actually lives in this file AND is
+    # marked as an asset (_is_local_asset) — otherwise the LOCAL attempt is doomed
+    # and Blender prints a "No asset found at path '…'" warning before we fall
+    # back to ESSENTIALS (handoff §6.3). An Essentials brush already used in the
+    # session is LINKED, not local, so it goes straight to ESSENTIALS. A local
+    # asset is addressed as "Brush/<name>" (_local_asset_id). An older note here
+    # blamed that prefix for the warning; the warning actually came from trying
+    # LOCAL on linked brushes, which fails whatever the identifier.
+    if brush is not None and _is_local_asset(brush):
         try:
             r = bpy.ops.brush.asset_activate(
                 asset_library_type='LOCAL',
-                relative_asset_identifier=brush.name)
+                relative_asset_identifier=_local_asset_id(brush))
             if 'FINISHED' in r:
                 return
         except Exception:
@@ -205,7 +273,7 @@ def _nearest_slot(angle, n=8):
 
 class SCULPTOOLS_OT_radial_palette(Operator):
     bl_idname  = "sculptools.radial_palette"
-    bl_label   = "Sculptools Palette"
+    bl_label   = "Sculptools: Palette"
     # NO 'UNDO' — on purpose. 'UNDO' makes Blender push a global (memfile) undo
     # step when this modal finishes. In Sculpt Mode, once strokes have dirtied the
     # mesh, that push serialises the WHOLE mesh into the undo memfile: O(vertices),
@@ -248,6 +316,16 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         return self._slots[i] if 0 <= i < len(self._slots) else ""
 
     def invoke(self, context, event):
+        # Never stack a second wheel on top of a running one. Any key that reaches
+        # the keymap while a wheel is open (the F pass-through once did, with the
+        # open hotkey on F) would otherwise open another, frozen behind the first.
+        # Asked of Blender itself, not of _wheel_active: a flag can go stale, and
+        # a stale one here would stop the wheel from ever opening again.
+        window = getattr(context, "window", None)
+        if any(op.bl_idname == _WHEEL_RUNNING_ID
+               for op in getattr(window, "modal_operators", ())):
+            return {'CANCELLED'}
+
         prefs = get_prefs(context)
         self._refresh_layout(context)   # num_slots + EFFECTIVE R/sub_separation
         self._sr         = prefs.slot_radius
@@ -347,12 +425,12 @@ class SCULPTOOLS_OT_radial_palette(Operator):
                 bpy.ops.wm.call_menu('INVOKE_DEFAULT',
                                      name='SCULPTOOLS_MT_palette_context')
             except Exception as exc:
-                print(f"Sculptools: palette menu failed to open: {exc}")
+                print(f"Sculptools: Palette gear menu failed to open: {exc}")
             return None
         try:
             bpy.app.timers.register(_later, first_interval=0.01)
         except Exception as exc:
-            print(f"Sculptools: could not schedule palette menu: {exc}")
+            print(f"Sculptools: Palette could not schedule the gear menu: {exc}")
 
     def _reload_active_palette(self, context):
         # num_slots is per-palette: update it BEFORE re-reading the slots, so that
@@ -634,7 +712,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
 
         name = self._slot_name(slot)
         if name:
-            _activate_slot(name)
+            _activate_or_warn(self, name)
         self._finish(context)
         return True
 
@@ -673,8 +751,9 @@ class SCULPTOOLS_OT_radial_palette(Operator):
 
         # Assigning a brush/tool from the slot context menu requests an auto-close:
         # the assign operator ran while the menu was up; now that the modal has
-        # resumed (menu dismissed on the click), finish the wheel. Checked before
-        # any per-event branch so it fires on the very next event (TIMER/MOUSEMOVE).
+        # resumed (menu dismissed on the click), finish the wheel. Quick Numbers
+        # requests it too, after a number key used with the wheel open. Checked
+        # before any per-event branch so it fires on the very next event.
         if _close_after_assign['pending']:
             _close_after_assign['pending'] = False
             self._finish(context)
@@ -712,12 +791,6 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         if event.type == 'WHEELDOWNMOUSE' and event.ctrl:
             bpy.ops.brush.scale_size(scalar=0.90)
             return {'RUNNING_MODAL'}
-
-        # ── F key: let Blender handle brush size drag natively ────────────────
-        if event.type == 'F' and event.value == 'PRESS':
-            # Temporarily finish, let F run, then re-open would be complex.
-            # Instead we just pass it through — Blender intercepts F globally.
-            return {'PASS_THROUGH'}
 
         # ── the open hotkey (default '\') closes the palette ─────────────────
         # Uses the key that actually opened the wheel, captured in invoke(),
@@ -787,6 +860,16 @@ class SCULPTOOLS_OT_radial_palette(Operator):
                         self._reload_active_palette(context)
                     context.area.tag_redraw()
                 return {'RUNNING_MODAL'}
+
+        # ── F key: let Blender handle brush size drag natively ────────────────
+        # AFTER the user's own keys (open, cycle, jump), never before: with the
+        # open hotkey bound to F, passing F through here sent it to the keymap,
+        # which opened ANOTHER wheel on top of this one at every press (5 wheels
+        # on screen, reported by the user). A cycle bound to F was shadowed too.
+        if event.type == 'F' and event.value == 'PRESS':
+            # Temporarily finish, let F run, then re-open would be complex.
+            # Instead we just pass it through — Blender intercepts F globally.
+            return {'PASS_THROUGH'}
 
         # ── N closes the palette and toggles the native sidebar ──────────────
         # Same reasoning as MIDDLEMOUSE above: PASS_THROUGH would leave this modal
@@ -869,7 +952,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
                     self._pending_popup = name   # fire on RELEASE
                     return {'RUNNING_MODAL'}
                 if name:
-                    _activate_slot(name)
+                    _activate_or_warn(self, name)
                 self._finish(context)
                 return {'FINISHED'}
 
@@ -880,7 +963,7 @@ class SCULPTOOLS_OT_radial_palette(Operator):
                     self._pending_popup = name   # fire on RELEASE
                     return {'RUNNING_MODAL'}
                 if name:
-                    _activate_slot(name)
+                    _activate_or_warn(self, name)
                 self._finish(context)
                 return {'FINISHED'}
 
@@ -953,6 +1036,15 @@ class SCULPTOOLS_OT_radial_palette(Operator):
         # wheel never used; all mouse/timer events are handled above too, so the
         # wheel keeps full control of its own interaction.
         return {'PASS_THROUGH'}
+
+    def cancel(self, context):
+        # Blender calls this when it removes the running modal from OUTSIDE —
+        # loading a file, which Ctrl+N / Ctrl+O reach through the final
+        # PASS_THROUGH. Without it _finish never ran: the draw handler outlived
+        # the operator and every redraw raised "StructRNA of type
+        # SCULPTOOLS_OT_radial_palette has been removed" until Blender restarted
+        # (reproduced on 5.2.2).
+        self._finish(context)
 
     def _finish(self, context):
         # Guard against being called twice (e.g. a quick-flick that finishes

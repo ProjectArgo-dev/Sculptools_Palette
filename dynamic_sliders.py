@@ -191,7 +191,7 @@ def _tag_redraw(context):
 
 class SCULPTOOLS_OT_dynamic_sliders(Operator):
     bl_idname  = "sculptools.dynamic_sliders"
-    bl_label   = "Sculptools Dynamic Sliders"
+    bl_label   = "Sculptools: Palette - Dynamic Sliders"
     bl_options = {'REGISTER'}
 
     @classmethod
@@ -271,6 +271,11 @@ class SCULPTOOLS_OT_dynamic_sliders(Operator):
             return {'CANCELLED'}
 
         return {'RUNNING_MODAL'}
+
+    def cancel(self, context):
+        # Blender removed the modal from outside (a file load): take the overlay
+        # down too, as the wheel does.
+        self._finish(context)
 
     def _finish(self, context):
         if getattr(self, '_finished', False):

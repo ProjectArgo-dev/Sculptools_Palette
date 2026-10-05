@@ -8,8 +8,6 @@ from bpy.types import Operator, Menu, Panel
 from bpy.props import StringProperty, IntProperty, BoolProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
-ASSET_FILE = "brushes/essentials_brushes-mesh_sculpt.blend"
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -23,8 +21,9 @@ def _resolve_target(op_slot, op_sub):
 
 def _request_wheel_close():
     """Ask the open wheel modal to auto-close (used after an assign from the slot
-    context menu). No-op if no wheel is open, so the same operators invoked from
-    anywhere else never leave a stale close flag behind."""
+    context menu, and by Quick Numbers when a number key is pressed with the wheel
+    open). No-op if no wheel is open, so the same operators invoked from anywhere
+    else never leave a stale close flag behind."""
     from .modal import _wheel_active, _close_after_assign
     if _wheel_active.get('on'):
         _close_after_assign['pending'] = True
@@ -153,10 +152,10 @@ class SCULPTOOLS_OT_confirm_assign(Operator):
         shown = display_name(self.brush_name)
         if self.sub_index < 0:
             set_slot(context, self.slot_index, self.brush_name)
-            self.report({'INFO'}, f"Sculptools: '{shown}' → Slot {self.slot_index+1}")
+            self.report({'INFO'}, f"Sculptools: Palette '{shown}' → Slot {self.slot_index+1}")
         else:
             set_sub(context, self.slot_index, self.sub_index, self.brush_name)
-            self.report({'INFO'}, f"Sculptools: '{shown}' → Slot {self.slot_index+1} / Sub {sub_display_number(self.sub_index)}")
+            self.report({'INFO'}, f"Sculptools: Palette '{shown}' → Slot {self.slot_index+1} / Sub {sub_display_number(self.sub_index)}")
         return {'FINISHED'}
 
 
@@ -171,7 +170,7 @@ class SCULPTOOLS_OT_shelf_add(Operator):
     def execute(self, context):
         brush = context.tool_settings.sculpt.brush if context.tool_settings.sculpt else None
         if not brush:
-            self.report({'WARNING'}, "No active brush")
+            self.report({'WARNING'}, "Sculptools: Palette found no active brush")
             return {'CANCELLED'}
         bpy.ops.sculptools.assign_to_slot('INVOKE_DEFAULT', brush_name=brush.name)
         return {'FINISHED'}
@@ -218,7 +217,7 @@ class SCULPTOOLS_OT_toolbar_add_brush(Operator):
     def execute(self, context):
         sculpt = getattr(context.tool_settings, "sculpt", None)
         if sculpt is None:
-            self.report({'WARNING'}, "No sculpt settings")
+            self.report({'WARNING'}, "Sculptools: Palette found no sculpt settings")
             return {'CANCELLED'}
 
         # A brush tool stands for a brush TYPE, not for a brush, and Blender does
@@ -236,7 +235,7 @@ class SCULPTOOLS_OT_toolbar_add_brush(Operator):
                 bpy.ops.wm.tool_set_by_id(name=self.tool_idname)
             except Exception as exc:
                 self.report({'WARNING'},
-                            f"Sculptools: could not select that tool: {exc}")
+                            f"Sculptools: Palette could not select that tool: {exc}")
                 return {'CANCELLED'}
 
         brush = sculpt.brush
@@ -251,10 +250,10 @@ class SCULPTOOLS_OT_toolbar_add_brush(Operator):
                 bpy.ops.wm.tool_set_by_id(name=previous)
             except Exception as exc:
                 self.report({'WARNING'},
-                            f"Sculptools: could not restore the previous tool: {exc}")
+                            f"Sculptools: Palette could not restore the previous tool: {exc}")
 
         if not name:
-            self.report({'WARNING'}, "No active brush")
+            self.report({'WARNING'}, "Sculptools: Palette found no active brush")
             return {'CANCELLED'}
         bpy.ops.sculptools.assign_to_slot('INVOKE_DEFAULT', brush_name=name)
         return {'FINISHED'}
@@ -275,7 +274,7 @@ class SCULPTOOLS_OT_toolbar_add(Operator):
         from .tools import key_for_tool_target, TOOL_PREFIX
         key = key_for_tool_target(self.tool_idname)
         if not key:
-            self.report({'WARNING'}, "Sculptools: not a palette tool")
+            self.report({'WARNING'}, "Sculptools: Palette does not support this tool")
             return {'CANCELLED'}
         bpy.ops.sculptools.assign_to_slot('INVOKE_DEFAULT',
                                           brush_name=f"{TOOL_PREFIX}{key}")
@@ -485,14 +484,14 @@ class SCULPTOOLS_OT_slot_add_active(Operator):
         sculpt = context.tool_settings.sculpt
         brush  = sculpt.brush if sculpt else None
         if not brush:
-            self.report({'WARNING'}, "No active sculpt brush")
+            self.report({'WARNING'}, "Sculptools: Palette found no active sculpt brush")
             return {'CANCELLED'}
         if sub >= 0:
             set_sub(context, slot, sub, brush.name)
-            self.report({'INFO'}, f"Sculptools: '{brush.name}' → Slot {slot+1} / Sub {sub_display_number(sub)}")
+            self.report({'INFO'}, f"Sculptools: Palette '{brush.name}' → Slot {slot+1} / Sub {sub_display_number(sub)}")
         else:
             set_slot(context, slot, brush.name)
-            self.report({'INFO'}, f"Sculptools: '{brush.name}' → Slot {slot+1}")
+            self.report({'INFO'}, f"Sculptools: Palette '{brush.name}' → Slot {slot+1}")
         _request_wheel_close()   # assigning from the context menu closes the wheel
         return {'FINISHED'}
 
@@ -522,7 +521,7 @@ class SCULPTOOLS_OT_slot_cut(Operator):
             set_slot(context, slot, '')
         if name:
             from .tools import display_name
-            self.report({'INFO'}, f"Sculptools: cut '{display_name(name)}'")
+            self.report({'INFO'}, f"Sculptools: Palette cut '{display_name(name)}'")
         return {'FINISHED'}
 
 
@@ -546,8 +545,8 @@ class SCULPTOOLS_OT_slot_copy(Operator):
         from .tools import display_name
         name = get_sub(context, slot, sub) if sub >= 0 else get_slot(context, slot)
         _slot_clipboard['brush'] = name or ''
-        self.report({'INFO'}, f"Sculptools: copied '{display_name(name)}'" if name
-                    else "Sculptools: slot empty — clipboard cleared")
+        self.report({'INFO'}, f"Sculptools: Palette copied '{display_name(name)}'" if name
+                    else "Sculptools: Palette slot empty — clipboard cleared")
         return {'FINISHED'}
 
 
@@ -570,16 +569,16 @@ class SCULPTOOLS_OT_slot_paste(Operator):
         if slot < 0:
             return {'CANCELLED'}
         if not brush:
-            self.report({'WARNING'}, "Sculptools clipboard is empty")
+            self.report({'WARNING'}, "Sculptools: Palette clipboard is empty")
             return {'CANCELLED'}
         from .tools import display_name
         shown = display_name(brush)
         if sub >= 0:
             set_sub(context, slot, sub, brush)
-            self.report({'INFO'}, f"Sculptools: pasted '{shown}' → Slot {slot+1} / Sub {sub_display_number(sub)}")
+            self.report({'INFO'}, f"Sculptools: Palette pasted '{shown}' → Slot {slot+1} / Sub {sub_display_number(sub)}")
         else:
             set_slot(context, slot, brush)
-            self.report({'INFO'}, f"Sculptools: pasted '{shown}' → Slot {slot+1}")
+            self.report({'INFO'}, f"Sculptools: Palette pasted '{shown}' → Slot {slot+1}")
         return {'FINISHED'}
 
 
@@ -625,15 +624,15 @@ class SCULPTOOLS_OT_assign_tool_to_slot(Operator):
         label = display_name(spec)
         if sub >= 0:
             set_sub(context, slot, sub, spec)
-            self.report({'INFO'}, f"Sculptools: '{label}' → Slot {slot+1} / Sub {sub_display_number(sub)}")
+            self.report({'INFO'}, f"Sculptools: Palette '{label}' → Slot {slot+1} / Sub {sub_display_number(sub)}")
         else:
             set_slot(context, slot, spec)
-            self.report({'INFO'}, f"Sculptools: '{label}' → Slot {slot+1}")
+            self.report({'INFO'}, f"Sculptools: Palette '{label}' → Slot {slot+1}")
         # Activate the tool right away on assign — but NOT one-shot ops, which
         # would fire their (possibly destructive) action just from being assigned.
         if not is_oneshot(spec):
-            from .modal import _activate_slot
-            _activate_slot(spec)
+            from .modal import _activate_or_warn
+            _activate_or_warn(self, spec)
         _request_wheel_close()   # assigning from the context menu closes the wheel
         return {'FINISHED'}
 
@@ -692,6 +691,11 @@ class SCULPTOOLS_OT_rename_palette(Operator):
         return context.window_manager.invoke_props_dialog(self, width=260)
 
     def draw(self, context):
+        # The name field opens already in edit mode, like Blender's own F2 rename:
+        # without it typing did nothing until the field was clicked, and the keys
+        # fell through to the shortcuts underneath (a typed "1" fired Quick Numbers).
+        # Enter confirms the text, a second Enter presses OK.
+        self.layout.activate_init = True
         self.layout.prop(self, "new_name", text="")
 
     def execute(self, context):
@@ -716,7 +720,7 @@ class SCULPTOOLS_OT_new_palette(Operator):
                             _apply_palette_dict, can_add, request_prefs_save)
         prefs = ensure_palettes(context)
         if not can_add(len(prefs.palettes)):
-            self.report({'WARNING'}, "Sculptools: maximum number of palettes reached")
+            self.report({'WARNING'}, "Sculptools: Palette maximum number of palettes reached")
             return {'CANCELLED'}
         pit = prefs.palettes.add()
         _apply_palette_dict(pit, build_new_palette())
@@ -731,7 +735,7 @@ class SCULPTOOLS_OT_new_palette(Operator):
         try:
             bpy.ops.sculptools.rename_palette('INVOKE_DEFAULT')
         except Exception as exc:
-            print(f"Sculptools: rename dialog failed to open: {exc}")
+            print(f"Sculptools: Palette rename dialog failed to open: {exc}")
         return {'FINISHED'}
 
 
@@ -747,7 +751,7 @@ class SCULPTOOLS_OT_duplicate_palette(Operator):
                             request_prefs_save)
         prefs = ensure_palettes(context)
         if not can_add(len(prefs.palettes)):
-            self.report({'WARNING'}, "Sculptools: maximum number of palettes reached")
+            self.report({'WARNING'}, "Sculptools: Palette maximum number of palettes reached")
             return {'CANCELLED'}
         src = prefs.palettes[prefs.active_palette_index]
         d = build_duplicate_palette(_read_palette_dict(src))
@@ -760,7 +764,7 @@ class SCULPTOOLS_OT_duplicate_palette(Operator):
         try:
             bpy.ops.sculptools.rename_palette('INVOKE_DEFAULT')
         except Exception as exc:
-            print(f"Sculptools: rename dialog failed to open: {exc}")
+            print(f"Sculptools: Palette rename dialog failed to open: {exc}")
         return {'FINISHED'}
 
 
@@ -805,7 +809,7 @@ class SCULPTOOLS_OT_delete_palette(Operator):
             return {'CANCELLED'}
         prefs = ensure_palettes(context)
         if not can_delete(len(prefs.palettes)):
-            self.report({'WARNING'}, "Sculptools: cannot delete the only palette")
+            self.report({'WARNING'}, "Sculptools: Palette cannot delete the only palette")
             return {'CANCELLED'}
         prefs.palettes.remove(prefs.active_palette_index)
         prefs.active_palette_index = clamp_index(prefs.active_palette_index,
@@ -821,7 +825,7 @@ class SCULPTOOLS_OT_jump_palette(Operator):
     here with its palette_index; the modifier keeps them from clashing with Quick
     Numbers' plain number keys (see prefs.sync_jump_bindings / __init__)."""
     bl_idname   = "sculptools.jump_palette"
-    bl_label    = "Jump to Palette"
+    bl_label    = "Sculptools: Palette - Jump to Palette"
     bl_description = "Switch directly to the palette with this number"
     bl_options  = {'INTERNAL'}   # no re-execution from redo/F9 (see rename)
 
@@ -845,7 +849,7 @@ class SCULPTOOLS_OT_jump_palette(Operator):
             request_prefs_save()
             _tag_view3d(context)
         self.report({'INFO'},
-                    f"Sculptools: Palette '{prefs.palettes[self.palette_index].name}'")
+                    f"Sculptools: Palette switched to '{prefs.palettes[self.palette_index].name}'")
         return {'FINISHED'}
 
 
@@ -866,7 +870,7 @@ class SCULPTOOLS_OT_rename_palette_menu(Operator):
         try:
             bpy.ops.sculptools.rename_palette('INVOKE_DEFAULT')
         except Exception as exc:
-            print(f"Sculptools: rename dialog failed to open: {exc}")
+            print(f"Sculptools: Palette rename dialog failed to open: {exc}")
         return {'FINISHED'}
 
 
@@ -881,7 +885,7 @@ class SCULPTOOLS_OT_delete_palette_menu(Operator):
         try:
             bpy.ops.sculptools.delete_palette('INVOKE_DEFAULT')
         except Exception as exc:
-            print(f"Sculptools: delete dialog failed to open: {exc}")
+            print(f"Sculptools: Palette delete dialog failed to open: {exc}")
         return {'FINISHED'}
 
 
@@ -1013,10 +1017,10 @@ class SCULPTOOLS_OT_export_palettes(Operator, ExportHelper):
             with open(self.filepath, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
         except OSError as exc:
-            self.report({'ERROR'}, f"Could not write file: {exc}")
+            self.report({'ERROR'}, f"Sculptools: Palette could not write the file: {exc}")
             return {'CANCELLED'}
         self.report({'INFO'},
-                    f"Exported {len(palette_dicts)} palettes to "
+                    f"Sculptools: Palette exported {len(palette_dicts)} palettes to "
                     f"{os.path.basename(self.filepath)}")
         return {'FINISHED'}
 
@@ -1054,13 +1058,13 @@ class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
             with open(self.filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except (OSError, ValueError) as exc:
-            self.report({'ERROR'}, f"Not a valid preset file: {exc}")
+            self.report({'ERROR'}, f"Sculptools: Palette could not read this preset file: {exc}")
             return {'CANCELLED'}
 
         # 2. validate
         ok, err = presets.validate_preset(data)
         if not ok:
-            self.report({'ERROR'}, err)
+            self.report({'ERROR'}, f"Sculptools: Palette could not import this preset: {err}")
             return {'CANCELLED'}
 
         # 3. build the full plan in memory (still non-destructive)
@@ -1068,7 +1072,7 @@ class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
             data, MAX_PALETTES, _EXPORTED_PREFS,
             {"jump_modifier": JUMP_MODIFIER_VALUES})
         if not sanitized:
-            self.report({'ERROR'}, "No usable palettes to import")
+            self.report({'ERROR'}, "Sculptools: Palette found no usable palettes to import")
             return {'CANCELLED'}
 
         # 4. atomic swap
@@ -1110,7 +1114,7 @@ class SCULPTOOLS_OT_import_palettes(Operator, ImportHelper):
         request_prefs_save()
         _tag_redraw_view3d(context)
 
-        msg = (f"Imported {len(sanitized)} palettes — "
+        msg = (f"Sculptools: Palette imported {len(sanitized)} palettes — "
                f"{found}/{total} brushes & tools available" + hotkey_note)
         if skipped or clamped:
             msg += f" ({skipped} malformed and {clamped} over-limit skipped)"
@@ -1132,7 +1136,7 @@ class SCULPTOOLS_OT_export_palettes_menu(Operator):
         try:
             bpy.ops.sculptools.export_palettes('INVOKE_DEFAULT')
         except Exception as exc:
-            print(f"Sculptools: export browser failed to open: {exc}")
+            print(f"Sculptools: Palette export browser failed to open: {exc}")
         return {'FINISHED'}
 
 
@@ -1146,7 +1150,7 @@ class SCULPTOOLS_OT_import_palettes_menu(Operator):
         try:
             bpy.ops.sculptools.import_palettes('INVOKE_DEFAULT')
         except Exception as exc:
-            print(f"Sculptools: import browser failed to open: {exc}")
+            print(f"Sculptools: Palette import browser failed to open: {exc}")
         return {'FINISHED'}
 
 

@@ -723,11 +723,11 @@ def request_prefs_save():
         try:
             bpy.ops.wm.save_userpref()
         except Exception as exc:
-            print(f"Sculptools: could not save preferences: {exc}")
+            print(f"Sculptools: Palette could not save preferences: {exc}")
         return None
 
     try:
-        bpy.app.timers.register(_do, first_interval=0.2)
+        bpy.app.timers.register(_do, first_interval=0.2, persistent=True)
     except Exception:
         _prefs_save_pending = False
 
@@ -812,7 +812,7 @@ def migrate_settings(context):
         try:
             _SETTINGS_MIGRATIONS[v](prefs)
         except Exception as exc:
-            print(f"Sculptools: settings migration {v} skipped: {exc}")
+            print(f"Sculptools: Palette settings migration {v} skipped: {exc}")
     prefs.settings_schema = SETTINGS_SCHEMA
     request_prefs_save()
     return prefs
@@ -976,7 +976,7 @@ def apply_stored_bindings(context):
         try:
             _apply_chord_to_kmi(kmi, parse_chord(getattr(prefs, name, "")))
         except Exception as exc:
-            print(f"Sculptools: could not restore {name}: {exc}")
+            print(f"Sculptools: Palette could not restore {name}: {exc}")
 
 
 def capture_live_bindings(context):
@@ -1004,7 +1004,7 @@ def capture_live_bindings(context):
                 setattr(prefs, name, encoded)
                 changed = True
         except Exception as exc:
-            print(f"Sculptools: could not capture {name}: {exc}")
+            print(f"Sculptools: Palette could not capture {name}: {exc}")
     if changed:
         request_prefs_save()
     return changed
@@ -1038,7 +1038,7 @@ def reset_hotkeys_to_defaults(context):
         try:
             _apply_chord_to_kmi(kmi, DEFAULT_HOTKEY_CHORDS.get(name))
         except Exception as exc:
-            print(f"Sculptools: could not reset {name}: {exc}")
+            print(f"Sculptools: Palette could not reset {name}: {exc}")
     try:
         prefs.property_unset("jump_modifier")
     except Exception:

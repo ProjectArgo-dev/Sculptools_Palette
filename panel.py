@@ -257,7 +257,7 @@ def start_preview_sidebar_watch():
         return 0.25
 
     try:
-        bpy.app.timers.register(_tick, first_interval=0.25)
+        bpy.app.timers.register(_tick, first_interval=0.25, persistent=True)
     except Exception:
         _preview_watch_active = False
 
@@ -334,7 +334,7 @@ def start_hotkey_mirror_watch():
         return 0.4
 
     try:
-        bpy.app.timers.register(_tick, first_interval=0.4)
+        bpy.app.timers.register(_tick, first_interval=0.4, persistent=True)
     except Exception:
         _hotkey_watch_active = False
 
@@ -543,7 +543,7 @@ class SCULPTOOLS_OT_reset_palette_appearance(Operator):
             for j in range(NUM_SUBSLOTS):
                 set_sub(context, i, j, "")
         _tag_redraw_view3d(context)
-        self.report({'INFO'}, "Sculptools: this palette reset")
+        self.report({'INFO'}, "Sculptools: Palette reset this palette")
         return {'FINISHED'}
 
 
@@ -569,7 +569,7 @@ class SCULPTOOLS_OT_reset_all_palettes(Operator):
                 pass
         factory_reset_palettes(context)
         _tag_redraw_view3d(context)
-        self.report({'INFO'}, "Sculptools: all palettes reset to defaults")
+        self.report({'INFO'}, "Sculptools: Palette reset all palettes to defaults")
         return {'FINISHED'}
 
 
@@ -593,7 +593,7 @@ class SCULPTOOLS_OT_reset_hotkeys(Operator):
         from .prefs import reset_hotkeys_to_defaults
         reset_hotkeys_to_defaults(context)
         _tag_redraw_view3d(context)
-        self.report({'INFO'}, "Sculptools: hotkeys reset to defaults")
+        self.report({'INFO'}, "Sculptools: Palette reset the hotkeys to defaults")
         return {'FINISHED'}
 
 
@@ -605,7 +605,7 @@ class SCULPTOOLS_OT_cycle_palette_holder(Operator):
     fires (the modal has the grab and handles cycling itself); if the chord matches
     Open, Open wins because its kmi is registered first in the same keymap."""
     bl_idname   = "sculptools.cycle_palette_holder"
-    bl_label    = "Cycle Palette (Preview)"
+    bl_label    = "Sculptools: Palette - Cycle Palette (Preview)"
     bl_options  = {'INTERNAL'}
 
     @classmethod
@@ -638,7 +638,7 @@ class SCULPTOOLS_OT_cycle_palette_back_holder(Operator):
     Shift+<key>). A distinct idname from the forward holder so the N-panel's keymap
     widget stays unambiguously pointed at the forward holder."""
     bl_idname   = "sculptools.cycle_palette_back_holder"
-    bl_label    = "Cycle Palette Backwards (Preview)"
+    bl_label    = "Sculptools: Palette - Cycle Palette Backwards (Preview)"
     bl_options  = {'INTERNAL'}
 
     @classmethod
@@ -754,7 +754,7 @@ class SCULPTOOLS_OT_refresh_thumbnails(Operator):
 
         _tag_redraw_view3d(context)
         self.report({'INFO'},
-                   f"Sculptools: requested previews for {len(names)} brush(es) "
+                   f"Sculptools: Palette requested previews for {len(names)} brush(es) "
                    f"— see System Console for details")
         return {'FINISHED'}
 

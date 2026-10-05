@@ -68,12 +68,12 @@ def _schedule_palette_warmup():
             from .gpu_draw import warm_palette_previews
             warm_palette_previews(iter_all_assigned_brush_names(bpy.context))
         except Exception as exc:
-            print(f"Sculptools: palette preview warm-up skipped: {exc}")
+            print(f"Sculptools: Palette preview warm-up skipped: {exc}")
         _warmup_poll_active = False
         return None  # done (or errored) — disarm the timer
 
     try:
-        bpy.app.timers.register(_tick, first_interval=1.0)
+        bpy.app.timers.register(_tick, first_interval=1.0, persistent=True)
     except Exception:
         _warmup_poll_active = False
 
@@ -94,7 +94,7 @@ def _sculptools_load_post(_dummy):
         # brush, and it is the first moment the palettes are actually needed.
         _schedule_palette_warmup()
         return None
-    bpy.app.timers.register(_run, first_interval=1.0)
+    bpy.app.timers.register(_run, first_interval=1.0, persistent=True)
 
 
 def register():
@@ -202,10 +202,18 @@ def register():
             # date and stamp it (see prefs.SETTINGS_SCHEMA).
             migrate_settings(bpy.context)
         except Exception as exc:
-            print(f"Sculptools: deferred palette init skipped: {exc}")
+            print(f"Sculptools: Palette deferred palette init skipped: {exc}")
         return None
+    # persistent=True on this and every other session timer of the add-on:
+    # Blender drops non-persistent timers on each file load, and opening Blender
+    # by double-clicking a .blend loads that file right AFTER register(). Without
+    # it these two never ran in such a session (custom hotkeys not restored, then
+    # overwritten with the defaults by the panel's mirror), and the flag-guarded
+    # timers (warm-up, preview queue, panel watches, prefs save) stayed armed
+    # with no timer behind them, so they could never start again.
     try:
-        bpy.app.timers.register(_ensure_palettes_startup, first_interval=0.5)
+        bpy.app.timers.register(_ensure_palettes_startup, first_interval=0.5,
+                                persistent=True)
     except Exception:
         pass
 
@@ -235,10 +243,11 @@ def register():
             sync_jump_bindings(bpy.context)
             sync_cycle_back_binding(bpy.context)
         except Exception as exc:
-            print(f"Sculptools: deferred binding sync skipped: {exc}")
+            print(f"Sculptools: Palette deferred binding sync skipped: {exc}")
         return None
     try:
-        bpy.app.timers.register(_sync_jump_startup, first_interval=0.6)
+        bpy.app.timers.register(_sync_jump_startup, first_interval=0.6,
+                                persistent=True)
     except Exception:
         pass
 

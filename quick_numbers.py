@@ -74,7 +74,7 @@ def _cycle_index(same_key, last_index, group_len):
 
 class SCULPTOOLS_OT_quick_number(Operator):
     bl_idname  = "sculptools.quick_number"
-    bl_label   = "Sculptools Quick Number"
+    bl_label   = "Sculptools: Palette - Quick Number"
     bl_options = {'REGISTER'}
 
     slot_index: IntProperty(default=0)  # type: ignore  # 0-based (key 1 -> 0)
@@ -121,14 +121,26 @@ class SCULPTOOLS_OT_quick_number(Operator):
         index    = _cycle_index(same_key, _qn_state['index'], len(group))
 
         name = group[index]
-        from .modal import _activate_slot
-        _activate_slot(name)
+        from .modal import _activate_slot, activation_failed_message
+        activated = _activate_slot(name)
 
+        # Cycling advances either way, so pressing again moves on to the next
+        # sub instead of retrying the one that failed.
         _qn_state['slot']  = slot
         _qn_state['index'] = index
         _qn_state['time']  = now
 
-        self.report({'INFO'}, f"Sculptools: '{display_name(name)}' (slot {slot + 1})")
+        if activated:
+            self.report({'INFO'}, f"Sculptools: Palette '{display_name(name)}' (slot {slot + 1})")
+        else:
+            self.report({'WARNING'}, activation_failed_message(name))
+
+        # With the wheel open, a number key reaches us through the wheel's final
+        # PASS_THROUGH. We have just used it, so the wheel closes, as it does after
+        # an assign from its slot menu. No-op when no wheel is open. The early
+        # PASS_THROUGH returns above leave the wheel open: nothing happened there.
+        from .operators import _request_wheel_close
+        _request_wheel_close()
         return {'FINISHED'}
 
 
